@@ -57,7 +57,7 @@ export function FieldGuide(){
 export function availableTargets(s:GameState,action:string):Map<number,{direction:string;steps:number}>{
  const result=new Map<number,{direction:string;steps:number}>(); const size=s.rules.size; const pos=s.positions[s.role]; if(pos===null)return result;
  const step=(cell:number,dr:number,dc:number)=>{const r=Math.floor(cell/size)+dr,c=cell%size+dc;return r>=0&&r<size&&c>=0&&c<size?r*size+c:null};
- const walk=(c:number)=>s.tiles[c]!=='#'&&!s.roadblocks[c]&&(s.tiles[c]!=='T'||(s.role==='prisoner'&&s.has_key));
+ const walk=(c:number)=>s.tiles[c]!=='#'&&!s.roadblocks[c]&&(s.tiles[c]!=='T'||s.role==='warder'||(s.role==='prisoner'&&s.has_key));
  const protectedCell=(c:number)=>Object.values(s.positions).includes(c)||s.tunnels.includes(c)||s.key===c||Boolean(s.pickups[c]);
  const connected=(tiles:string[],blocked:number[])=>{const floors=tiles.map((t,i)=>t==='.'&&!blocked.includes(i)?i:-1).filter(i=>i>=0);const seen=new Set<number>();const q=[floors[0]];while(q.length){const c=q.pop()!;if(c===undefined||seen.has(c))continue;seen.add(c);for(const [dr,dc] of [[-1,0],[1,0],[0,-1],[0,1]]){const n=step(c,dr,dc);if(n!==null&&tiles[n]==='.'&&!blocked.includes(n)&&!seen.has(n))q.push(n)}}return floors.every(c=>seen.has(c))&&s.tunnels.every(c=>[[-1,0],[1,0],[0,-1],[0,1]].some(([dr,dc])=>{const n=step(c,dr,dc);return n!==null&&seen.has(n)}))};
  for(const [direction,dr,dc] of [['up',-1,0],['down',1,0],['left',0,-1],['right',0,1]] as const){const n=step(pos,dr,dc);if(n===null)continue;

@@ -1,10 +1,70 @@
 import json
 from copy import deepcopy
 import pytest
-from escapeplan.engine import Rules, State, generate, connected, apply_action, legal_actions, observation, determinize
+from escapeplan.engine import Rules, State, generate, connected, apply_action, legal_actions, observation, determinize, neighbors, distance
 from escapeplan.ai import choose, rollout, train
 from escapeplan.storage import Store
 from escapeplan.engine import safe_escape_route
+
+
+def map_geometry_ok(state):
+    size = state.rules.size
+    free = [i for i, tile in enumerate(state.tiles) if tile == '.']
+    if not free:
+        return False
+    seen = {free[0]}
+    q = [free[0]]
+    while q:
+        cell = q.pop()
+        for nxt in neighbors(cell, size):
+            if state.tiles[nxt] == '.' and nxt not in seen:
+                seen.add(nxt)
+                q.append(nxt)
+    if len(seen) != len(free):
+        return False
+    if len(state.tunnels) < 2:
+        return False
+    entrances = {n for tunnel in state.tunnels for n in neighbors(tunnel, size) if state.tiles[n] == '.'}
+    if len(entrances) < 2:
+        return False
+    if any(cell in free and all(e in neighbors(cell, size) for e in entrances) for cell in free):
+        return False
+    dead = [cell for cell in free if sum(1 for n in neighbors(cell, size) if state.tiles[n] != '#') <= 1]
+    if len(dead) > 1 or state.positions['prisoner'] in dead:
+        return False
+    for cell in free:
+        if cell in (state.positions['warder'], state.positions['prisoner']):
+            continue
+        seen = {state.positions['prisoner']}
+        q = [state.positions['prisoner']]
+        can_reach_tunnel = False
+        while q:
+            current = q.pop()
+            for nxt in neighbors(current, size):
+                if nxt == cell or nxt in seen:
+                    continue
+                if state.tiles[nxt] == '#':
+                    continue
+                if nxt in state.tunnels:
+                    can_reach_tunnel = True
+                    break
+                if state.tiles[nxt] == '.':
+                    seen.add(nxt)
+                    q.append(nxt)
+            if can_reach_tunnel:
+                break
+        if not can_reach_tunnel and distance(state, state.positions['warder'], cell, 'warder') <= distance(state, state.positions['prisoner'], cell, 'prisoner'):
+            return False
+    if distance(state, state.positions['warder'], state.positions['prisoner'], 'warder') < 3:
+        return False
+    dP = distance(state, state.positions['prisoner'], state.real_tunnel, 'prisoner')
+    if dP < 3:
+        return False
+    branch = [e for e in entrances if distance(state, state.positions['prisoner'], e, 'prisoner') + 1 == dP]
+    if not branch:
+        return False
+    dW = min(distance(state, state.positions['warder'], e, 'warder') for e in branch)
+    return dP - 2 <= dW <= dP
 
 
 def test_static_stages_have_a_safe_escape_opening():
@@ -12,6 +72,23 @@ def test_static_stages_have_a_safe_escape_opening():
         size = (5, 7, 9)[(stage - 1) // 3]
         state = generate(Rules(mode='stage', size=size, stage=stage), 10000 + stage*100 + size)
         assert safe_escape_route(state)
+
+
+def test_generated_maps_satisfy_geometry_constraints():
+    for seed in range(40):
+        state = generate(Rules(mode='special', size=5, modifiers=[], powers='both'), seed)
+        assert map_geometry_ok(state)
+
+
+def test_pick_map_only_uses_valid_generated_layouts(tmp_path):
+    store = Store(tmp_path)
+    rules = Rules(mode='special', size=5, modifiers=[], powers='both')
+    seed, metrics = store.pick_map(rules)
+    state = generate(rules, seed)
+    assert map_geometry_ok(state)
+    assert metrics['prisoner_to_objective'] >= 2
+    assert 'validation' in metrics
+    store.db.close()
 
 
 def test_safe_route_accounts_for_warder_first_and_camping():
@@ -46,7 +123,7 @@ def test_generated_maps(size,count,mods):
     for seed in range(15):
         s=generate(Rules(mode='special',size=size,modifiers=mods,powers='both'),seed)
         assert s.tiles.count('#')==count
-        assert len(s.tunnels)==(3 if 'fake' in mods else 1)
+        assert len(s.tunnels)==(3 if 'fake' in mods else 2)
         assert connected(s)
         assert s.positions['warder']!=s.positions['prisoner']
         assert not set(s.positions.values())&set(s.tunnels)
@@ -57,7 +134,7 @@ def test_classic_cannot_enable_extras():
     r=Rules.parse({'mode':'classic','size':9,'bot':'hard','powers':'both','modifiers':['fake']})
     assert (r.size,r.bot,r.powers,r.modifiers)==(5,'','off',[])
     s=generate(r,1)
-    assert s.tiles.count('.')==19
+    assert s.tiles.count('.')==18
 
 
 def test_moves_capture_escape_and_immutability():
@@ -67,7 +144,10 @@ def test_moves_capture_escape_and_immutability():
     with pytest.raises(ValueError): apply_action(end,{'kind':'move','direction':'down'})
     s=arena();s.turn='prisoner';s.positions['prisoner']=23
     assert apply_action(s,{'kind':'move','direction':'right'}).winner=='prisoner'
-    s.turn='warder';s.positions['warder']=23
+    s=arena();s.turn='warder';s.positions['warder']=23
+    end=apply_action(s,{'kind':'move','direction':'right'})
+    assert end.positions['warder']==24 and end.turn=='prisoner'
+    s=arena();s.turn='prisoner';s.positions['prisoner']=23;s.has_key=False
     with pytest.raises(ValueError):apply_action(s,{'kind':'move','direction':'right'})
 
 

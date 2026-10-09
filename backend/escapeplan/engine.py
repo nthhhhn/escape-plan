@@ -100,7 +100,9 @@ def walkable(s: State, cell: int, role: str, unlocked: bool | None = None) -> bo
     if s.tiles[cell] == '#' or cell in s.roadblocks:
         return False
     if cell in s.tunnels:
-        return role == 'prisoner' and (s.has_key if unlocked is None else unlocked)
+        if role == 'warder':
+            return True
+        return s.has_key if unlocked is None else unlocked
     return True
 
 
@@ -137,7 +139,13 @@ def route_distance(tiles, blocks, unlocked, size, start, goal, role, algorithm):
     # Both policies use the same movement permissions. A* prioritizes Manhattan distance.
     import heapq
     def allowed(cell):
-        return tiles[cell] != '#' and cell not in blocks and (tiles[cell] != 'T' or (role == 'prisoner' and unlocked))
+        if tiles[cell] == '#':
+            return False
+        if cell in blocks:
+            return False
+        if tiles[cell] != 'T':
+            return True
+        return role == 'warder' or (role == 'prisoner' and (unlocked if unlocked is not None else False))
     if algorithm == 'bfs':
         queue = deque([(start, 0)])
         seen = {start}
@@ -207,7 +215,8 @@ def generate(rules: Rules, seed: int) -> State:
         rng.shuffle(cells)
         count = {5: 5, 7: 10, 9: 16}[size]
         obstacles = set(cells[:count])
-        tunnels = cells[count:count + (3 if 'fake' in rules.modifiers else 1)]
+        tunnel_count = 3 if 'fake' in rules.modifiers else 2
+        tunnels = cells[count:count + tunnel_count]
         floors = [c for c in cells if c not in obstacles and c not in tunnels]
         warders = [c for c in floors if all(abs(c // size - t // size) + abs(c % size - t % size) >= 3 for t in tunnels)]
         if not warders:
@@ -220,6 +229,91 @@ def generate(rules: Rules, seed: int) -> State:
         key = rng.choice([c for c in floors if c not in (w, p)]) if 'key' in rules.modifiers else None
         s = State(deepcopy(rules), seed, ['#' if c in obstacles else 'T' if c in tunnels else '.' for c in range(size*size)], {'warder': w, 'prisoner': p}, tunnels, rng.choice(tunnels), key, key is None)
         s.charges = {role: {power: int(rules.powers in ('limited', 'both')) for power in powers} for role, powers in POWERS.items()}
+
+        def shortest_path(start: int, goal: int, role: str, blocked: set[int] | None = None) -> int:
+            blocked = set() if blocked is None else set(blocked)
+            if start == goal:
+                return 0
+            q = deque([(start, 0)])
+            seen = {start}
+            while q:
+                cell, dist = q.popleft()
+                for nxt in neighbors(cell, size):
+                    if nxt in blocked or nxt in seen:
+                        continue
+                    tile = s.tiles[nxt]
+                    if tile == '#':
+                        continue
+                    if tile == 'T' and role != 'prisoner':
+                        continue
+                    if nxt == goal:
+                        return dist + 1
+                    seen.add(nxt)
+                    q.append((nxt, dist + 1))
+            return size * size
+
+        free_cells = [i for i, tile in enumerate(s.tiles) if tile == '.']
+        if not free_cells:
+            continue
+        local_region = {free_cells[0]}
+        queue = deque([free_cells[0]])
+        while queue:
+            cell = queue.popleft()
+            for nxt in neighbors(cell, size):
+                if s.tiles[nxt] == '.' and nxt not in local_region:
+                    local_region.add(nxt)
+                    queue.append(nxt)
+        if len(local_region) != len(free_cells):
+            continue
+
+        tunnel_entrances = {n for t in s.tunnels for n in neighbors(t, size) if s.tiles[n] == '.'}
+        if len(tunnel_entrances) < 2:
+            continue
+        if any(cell in free_cells and all(e in neighbors(cell, size) for e in tunnel_entrances) for cell in free_cells):
+            continue
+        dead_ends = [cell for cell in free_cells if sum(1 for n in neighbors(cell, size) if s.tiles[n] != '#') <= 1]
+        if len(dead_ends) > 1 or p in dead_ends:
+            continue
+
+        chokepoint_reject = False
+        for cell in free_cells:
+            if cell in (w, p):
+                continue
+            seen = {p}
+            q = deque([p])
+            can_reach_tunnel = False
+            while q:
+                current = q.popleft()
+                for nxt in neighbors(current, size):
+                    if nxt == cell or nxt in seen:
+                        continue
+                    if s.tiles[nxt] == '#':
+                        continue
+                    if nxt in s.tunnels:
+                        can_reach_tunnel = True
+                        break
+                    if s.tiles[nxt] == '.':
+                        seen.add(nxt)
+                        q.append(nxt)
+                if can_reach_tunnel:
+                    break
+            if not can_reach_tunnel and shortest_path(w, cell, 'warder') <= shortest_path(p, cell, 'prisoner'):
+                chokepoint_reject = True
+                break
+        if chokepoint_reject:
+            continue
+        if shortest_path(w, p, 'warder') < 3:
+            continue
+        dP = shortest_path(p, s.real_tunnel, 'prisoner')
+        if dP < 3:
+            continue
+        shortest_entrances = [e for e in tunnel_entrances if shortest_path(p, e, 'prisoner') + 1 == dP]
+        if not shortest_entrances:
+            continue
+        dW = min(shortest_path(w, e, 'warder') for e in shortest_entrances)
+        if not (dP - 2 <= dW <= dP):
+            continue
+
         if not connected(s):
             continue
         # Multiple entrances reduce single-square exit control. Walking distance
@@ -229,7 +323,6 @@ def generate(rules: Rules, seed: int) -> State:
             continue
         if any(min(distance(s, w, n, 'warder') for n in a) < 2 for a in approaches):
             continue
-        # Initial route-distance constraints are balance heuristics, not proof of fairness.
         if distance(s, p, key if key is not None else s.real_tunnel, 'prisoner') < 2:
             continue
         if rules.mode == 'stage' and not rules.modifiers and rules.powers == 'off' and not safe_escape_route(s):
