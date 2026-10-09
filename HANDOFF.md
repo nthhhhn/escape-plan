@@ -1,6 +1,6 @@
 # Escape Plan handoff
 
-Updated: 2026-10-09 (Asia/Bangkok), solver checkpoint
+Updated: 2026-10-09 (Asia/Bangkok), completed offline atlas
 
 ## Current status
 
@@ -8,7 +8,11 @@ The game source, launcher, documentation and deployment files are on GitHub at `
 
 The current task is a separate, offline map-analysis database and animated HTML showcase. The initial approval/usage interruption has cleared. `map_lab/solver.py`, `map_lab/generate.py`, and `map_lab/test_solver.py` now exist. Four tests pass, including independent engine-based fixed-point analysis for all 256 fixed-exit 3x3 wall patterns, larger-board transitions and proof replays, symmetry deduplication, and independent-route counts. Every generated layout also passes all-state outcome/remoteness checks and its demonstration is replayed through the real engine.
 
-A resumable run is generating 10,000 accepted layouts for each supported size (30,000 total) into **`data/map-lab-pool.sqlite3`**. The pilot `data/map-lab.sqlite3` is an earlier spawn-sampling experiment, not the final pool. Final HTML is not built yet. Resume with `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=backend:. .venv/bin/python -m map_lab.generate --target 10000 --no-export`. Do not run two writers concurrently. A 100-layout pilot took approximately 0.21s / 0.73s / 1.99s for 5x5 / 7x7 / 9x9 on this host; final run timings will be exported.
+Generation is complete: **30,000 unique layouts**, 10,000 per supported size, each with 5,000 proven prisoner wins and 5,000 proven warder wins. The full database is **`data/map-lab-pool.sqlite3`**. Generation took 21.23 / 73.48 / 201.85 seconds for 5x5 / 7x7 / 9x9 (about five minutes total). No generator is running. The pilot `data/map-lab.sqlite3` is an earlier experiment, not the final pool.
+
+Open **`map-showcase/index.html`** directly in a browser: 30 animated examples per size, 90 total, with looping playback, stepping, speed control, filters, exact move alternatives, difficulty explanations and methodology. The portable analysis-only database is **`map-showcase/map-pool.sqlite3.gz`** (11.4 MB compressed). Restore on a fresh checkout with `.venv/bin/python -m map_lab.restore`; it refuses to overwrite an existing database. Restore was successfully verified in `/tmp`, including checksum, SQLite integrity, record count and table allowlist. Snapshot packaging converts WAL format to a self-contained rollback-journal database.
+
+Validation is complete: four solver tests passed; all 30,000 demonstrations were replayed through the real engine (233,818 actions, including 26,758 timeout waits); all 90 exported scenarios were independently re-solved and their displayed alternatives checked. Browser QA passed for all 90 examples, controls, filters, replay loops and mobile layout, with zero JavaScript errors or external requests. Machine-readable counts are in `map-showcase/validation-report.json` and `generation-report.json`. Full assumptions, formulas and reproduction commands are in **`map_lab/METHODOLOGY.md`**.
 
 The generator samples up to three eligible starting pairs on each layout and alternates selecting the easiest/median/hardest by its provisional score. It preferentially seeks the underrepresented winning role when possible. Every map is decisive with an optimal finish of 4–80 plies. These are exact static-rule puzzles, not proven competitively balanced or human-validated maps. Difficulty is ranked within board size and winning role; saved scores are proxies, not human success probabilities.
 
@@ -19,7 +23,7 @@ The user asks to push progress and next-step notes to GitHub as work proceeds so
 - Generate a large persistent pool of interesting maps, ordered from easy to hard, for the supported board sizes 5x5, 7x7 and 9x9.
 - Difficulty must consider how difficult a human would find the winning strategy, not merely move count or simulated win rate.
 - Produce a standalone HTML showcase with 30 selected maps per size (90 total), ordered by estimated difficulty and with looping animated winning demonstrations.
-- Keep a much larger collection in a real SQLite database. The final pool size is not agreed; exhaustive enumeration is not feasible. Pick and disclose a finite generation budget, record actual counts and runtime, and make generation resumable.
+- Keep a much larger collection in a real SQLite database. The chosen finite budget is 30,000 maps; exhaustive enumeration is not feasible. Generation is resumable and can extend this budget.
 - Keep the offline experiment separate from the running multiplayer game. Do not replace production map selection or change gameplay rules without discussing results.
 
 ## Research and findings
@@ -50,15 +54,15 @@ Sources consulted for methodology (not installed or copied):
 8. Store scenario, seed, rules/solver version, outcome, metrics, difficulty, animation trace and validation result in an isolated SQLite file such as `data/map-lab.sqlite3`. Existing live database `data/escapeplan.sqlite3` must remain untouched.
 9. Embed 30 representative examples per size into a standalone HTML file. Provide size selection, easy-to-hard order, proven winner, explanations, play/pause, next/previous step, speed control and looping replay after the terminal result. Distinguish replay looping from a stalemate.
 
-## Immediate next steps
+## Next steps for a teammate
 
-- Finish the active generation run or resume it after confirming no writer is running.
-- Create `map_lab/showcase.template.html`; then run generation with `--export-only` to create the standalone 90-map HTML and JSON exports in `map-showcase/`.
-- Browser-check playback, board size selection, rank ordering, both winning roles, step/scrub controls, finish/replay, and responsive layout. No live-server restart is needed.
-- Add a method document with exact rule assumptions, formulas, solver proof reasoning, human-difficulty limitations and measured final counts/runtime.
-- Audit all database records and all exported traces independently. Supply a portable analysis-only database artifact if its size is suitable for GitHub.
-- Commit code, method documentation and a shareable showcase or compact export. The ignored `data/` directory is not a GitHub handoff; provide reproducible commands and, if appropriate, a deliberately selected analysis-only export without player data.
-- Update this log and push each meaningful milestone. Never force-push over teammates' work.
+The requested offline artifact is complete. These are future research/integration steps, not unfinished generation:
+
+- Review the showcase with people before treating provisional Easy/Medium/Hard as actual human difficulty. Record errors, reasoning, enjoyment and willingness to replay; counterbalance roles and presentation order.
+- Compare several imperfect agent styles and calibrate or reject the present score weights. A forced-win scenario is not proof of competitive fairness.
+- Discuss live-game integration separately. No production map selection or live database has been changed. Powers, hidden information and moving tunnels require separate models and validation.
+- To extend the pool, restore if necessary, then run `PYTHONPATH=backend:. .venv/bin/python -m map_lab.generate --target 20000 --no-export` (20,000 per size), followed by `--export-only` and `python -m map_lab.audit` with the same environment. Run only one writer. Revalidate and update this log before pushing.
+- Prior pushed checkpoints: `b0906f2` (requirements/handoff), `b915997` (solver/generator/tests). The completion commit contains this log, the showcase, portable database, audits and methodology. Never force-push over teammates' work.
 
 ## Environment notes
 
