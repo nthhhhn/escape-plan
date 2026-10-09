@@ -1,12 +1,16 @@
 # Escape Plan handoff
 
-Updated: 2026-10-09 (Asia/Bangkok)
+Updated: 2026-10-09 (Asia/Bangkok), solver checkpoint
 
 ## Current status
 
 The game source, launcher, documentation and deployment files are on GitHub at `nthhhhn/escape-plan`, branch `main`, initial commit `0bcd309`. The working tree was clean when this handoff was prepared. The local game uses FastAPI, WebSockets, React and SQLite. Previous backend validation passed 33 tests.
 
-The current task is a separate, offline map-analysis database and animated HTML showcase. **No map solver, new database, map pool or showcase has been created yet.** The first attempt to add `map_lab/solver.py` was not executed: automatic approval review could not complete because the account usage limit had been reached. This was an approval-system failure, not a finding that the code was unsafe.
+The current task is a separate, offline map-analysis database and animated HTML showcase. The initial approval/usage interruption has cleared. `map_lab/solver.py`, `map_lab/generate.py`, and `map_lab/test_solver.py` now exist. Four tests pass, including independent engine-based fixed-point analysis for all 256 fixed-exit 3x3 wall patterns, larger-board transitions and proof replays, symmetry deduplication, and independent-route counts. Every generated layout also passes all-state outcome/remoteness checks and its demonstration is replayed through the real engine.
+
+A resumable run is generating 10,000 accepted layouts for each supported size (30,000 total) into **`data/map-lab-pool.sqlite3`**. The pilot `data/map-lab.sqlite3` is an earlier spawn-sampling experiment, not the final pool. Final HTML is not built yet. Resume with `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=backend:. .venv/bin/python -m map_lab.generate --target 10000 --no-export`. Do not run two writers concurrently. A 100-layout pilot took approximately 0.21s / 0.73s / 1.99s for 5x5 / 7x7 / 9x9 on this host; final run timings will be exported.
+
+The generator samples up to three eligible starting pairs on each layout and alternates selecting the easiest/median/hardest by its provisional score. It preferentially seeks the underrepresented winning role when possible. Every map is decisive with an optimal finish of 4–80 plies. These are exact static-rule puzzles, not proven competitively balanced or human-validated maps. Difficulty is ranked within board size and winning role; saved scores are proxies, not human success probabilities.
 
 The user asks to push progress and next-step notes to GitHub as work proceeds so a teammate can continue. Commit meaningful checkpoints together with updates to this file. Do not claim a push succeeded until Git confirms it. Do not include credentials, admin tokens, local player databases or unrelated changes.
 
@@ -48,12 +52,11 @@ Sources consulted for methodology (not installed or copied):
 
 ## Immediate next steps
 
-- Resolve the account approval/usage block before any further edits or network pushes that need approval; do not bypass it.
-- Implement and test the exact solver in new isolated `map_lab/` files. The previously attempted patch did not land and should not be treated as tested code.
-- Verify terminal precedence, all legal transitions, waiting, cycles and remoteness; cross-check small boards with an independent reference method.
-- Replay every selected proof trace through the real `engine.apply_action()` (including `timeout=True` for waits). Assert the advertised winner and no illegal move.
-- Benchmark a small batch before choosing a large pool target. Log candidate/accepted/rejected counts and elapsed time. A prior estimate of seconds to minutes was not a benchmark.
-- Generate a resumable pool, then produce and browser-check the 90-map showcase on desktop and mobile.
+- Finish the active generation run or resume it after confirming no writer is running.
+- Create `map_lab/showcase.template.html`; then run generation with `--export-only` to create the standalone 90-map HTML and JSON exports in `map-showcase/`.
+- Browser-check playback, board size selection, rank ordering, both winning roles, step/scrub controls, finish/replay, and responsive layout. No live-server restart is needed.
+- Add a method document with exact rule assumptions, formulas, solver proof reasoning, human-difficulty limitations and measured final counts/runtime.
+- Audit all database records and all exported traces independently. Supply a portable analysis-only database artifact if its size is suitable for GitHub.
 - Commit code, method documentation and a shareable showcase or compact export. The ignored `data/` directory is not a GitHub handoff; provide reproducible commands and, if appropriate, a deliberately selected analysis-only export without player data.
 - Update this log and push each meaningful milestone. Never force-push over teammates' work.
 
