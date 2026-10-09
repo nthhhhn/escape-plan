@@ -1,0 +1,45 @@
+{
+  "records": 30000,
+  "unique_layouts": 30000,
+  "demonstration_moves": 233818,
+  "timeout_waits": 26758,
+  "showcase_maps_resolved_again": 90,
+  "groups": [
+    {
+      "size": 5,
+      "winner": "prisoner",
+      "count": 5000
+    },
+    {
+      "size": 5,
+      "winner": "warder",
+      "count": 5000
+    },
+    {
+      "size": 7,
+      "winner": "prisoner",
+      "count": 5000
+    },
+    {
+      "size": 7,
+      "winner": "warder",
+      "count": 5000
+    },
+    {
+      "size": 9,
+      "winner": "prisoner",
+      "count": 5000
+    },
+    {
+      "size": 9,
+      "winner": "warder",
+      "count": 5000
+    }
+  ],
+  "database_integrity": "ok",
+  "all_traces_engine_validated": true,
+  "seconds": 9.18,
+  "snapshot_bytes": 11375691,
+  "uncompressed_bytes": 138878976,
+  "sqlite_sha256": "f7263fa2843ed54c5b7d4202cc08194b381b701213e505da25e543cb90370723"
+}

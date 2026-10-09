@@ -1,0 +1,51 @@
+{
+  "version": "static-retrograde-v1",
+  "generated_at": "2026-10-09T04:30:04.230333+00:00",
+  "summary": [
+    {
+      "size": 5,
+      "total": 10000,
+      "outcomes": {
+        "prisoner": 5000,
+        "warder": 5000
+      },
+      "attempts": 10779,
+      "rejected": {
+        "duplicate_layout": 779
+      },
+      "seconds": 21.23
+    },
+    {
+      "size": 7,
+      "total": 10000,
+      "outcomes": {
+        "prisoner": 5000,
+        "warder": 5000
+      },
+      "attempts": 10000,
+      "rejected": {},
+      "seconds": 73.48
+    },
+    {
+      "size": 9,
+      "total": 10000,
+      "outcomes": {
+        "prisoner": 5000,
+        "warder": 5000
+      },
+      "attempts": 10000,
+      "rejected": {},
+      "seconds": 201.85
+    }
+  ],
+  "human_validated": false,
+  "rules": {
+    "powers": "off",
+    "modifiers": [],
+    "warder_first": true,
+    "allow_wait": "timeout pass",
+    "visibility": "full",
+    "objective": "capture or escape",
+    "scope": "independent offline pool; not installed in live map selection"
+  }
+}

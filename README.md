@@ -4,6 +4,8 @@ Escape Plan is a server-authoritative, browser-based pursuit game built for the 
 
 The implementation includes the required two-player Classic mode, a FastAPI WebSocket server, a visible server dashboard, rematches, score reset, 10-second turns, persistent records, illustrated role-aware play, Ready and countdown flow, named AI opponents and Field Guide, Stage mode, power-ups, all original special modifiers plus optional tunnel relocation, Q-learning training, opt-in rollout coaching, reaction memes, and cloud deployment files.
 
+For the offline 30,000-map dataset, actual Python generation/solver code, algorithm explanation, database restore instructions and animated showcase, see the [Map generation reference](map_lab/README.md). This dataset is separate from live multiplayer map selection.
+
 ## Stack
 
 - React, TypeScript, Vite, Tailwind CSS, and shadcn-style UI components
