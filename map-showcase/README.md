@@ -7,3 +7,5 @@ The full collection contains 30,000 unique layouts. From the project root, run `
 Outcomes are proved for fixed terrain with a visible tunnel, no powers or modifiers, and timeout waiting allowed. Difficulty labels are provisional relative rankings, not human-tested ratings or fair-win probabilities.
 
 See [methodology](../map_lab/METHODOLOGY.md), [validation results](validation-report.json), [generation results](generation-report.json), and [handoff / next steps](../HANDOFF.md).
+
+The [Python and database reference](../map_lab/README.md) links the actual scripts used, explains the generation pipeline and database fields, and records the reproduction commands.

@@ -2,6 +2,8 @@
 
 Updated: 2026-10-09 (Asia/Bangkok), completed offline atlas
 
+Documentation follow-up: added `map_lab/README.md` as the entry point linking the actual Python scripts, full methodology, generation commands, database schema and compressed 30,000-map snapshot. Linked it from the project README and showcase README. Rechecked local database counts and integrity. The completed artifact was pushed as `cafe95b`; this follow-up makes its code and data provenance easier to find.
+
 ## Current status
 
 The game source, launcher, documentation and deployment files are on GitHub at `nthhhhn/escape-plan`, branch `main`, initial commit `0bcd309`. The working tree was clean when this handoff was prepared. The local game uses FastAPI, WebSockets, React and SQLite. Previous backend validation passed 33 tests.
