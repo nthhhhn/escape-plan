@@ -76,11 +76,9 @@ def bot_name(rules):
 class GameServer:
     def __init__(self):
         self.store = Store(DATA)
-        token_file = DATA/'admin-token'
-        if not token_file.exists():
-            token_file.write_text(secrets.token_urlsafe(32))
-            token_file.chmod(0o600)
-        self.admin_token = os.environ.get('ADMIN_TOKEN') or token_file.read_text().strip()
+        # Keep LAN-only development convenient, but require a bearer token
+        # whenever ADMIN_TOKEN is configured (as it is in cloud deployment).
+        self.admin_token = os.environ.get('ADMIN_TOKEN', '').strip()
         self.players: dict[str, Player] = {}
         self.connections: dict[WebSocket, str | None] = {}
         self.rooms: dict[str, Room] = {}
@@ -137,9 +135,6 @@ class GameServer:
         else:
             seed, room.map_metrics = self.store.pick_map(room.rules)
         room.state = generate(room.rules, seed)
-        self.store.reset_scores(room.players)
-        for pid in room.players:
-            self.players[pid].score = 0
         room.match_id = uuid4().hex
         warder = winner if winner in room.players else secrets.choice(room.players)
         if winner is None and room.rules.bot and room.rules.player_role != 'random':
@@ -157,7 +152,7 @@ class GameServer:
         room.estimates.clear()
         room.coaches.clear()
         room.bot_info.clear()
-        self.store.start(room.match_id,room.state,room.roles)
+        self.store.start(room.match_id,room.state,room.roles,room.id)
         await self.publish(room)
 
     async def transition(self, room, action, timeout=False):
@@ -416,10 +411,13 @@ app = FastAPI(title='Escape Plan',lifespan=lifespan)
 
 
 def admin(request: Request, authorization: str | None):
-    expected = request.app.state.game.admin_token
-    if not authorization or not secrets.compare_digest(authorization, 'Bearer '+expected):
+    g = request.app.state.game
+    if g.admin_token and (
+        not authorization
+        or not secrets.compare_digest(authorization, 'Bearer ' + g.admin_token)
+    ):
         raise HTTPException(403,'Server admin token required')
-    return request.app.state.game
+    return g
 
 
 @app.get('/api/health')
@@ -435,7 +433,7 @@ def training_status():
 
 @app.post('/api/admin/train')
 async def start_training(request: Request, authorization: str | None = Header(default=None)):
-    g = admin(request,authorization)
+    g = admin(request, authorization)
     if g.training and not g.training.done():
         raise HTTPException(409,'Training is already running')
     body = await request.json()
@@ -459,13 +457,47 @@ async def start_training(request: Request, authorization: str | None = Header(de
 
 @app.get('/api/admin')
 def dashboard(request: Request, authorization: str | None = Header(default=None)):
-    g = admin(request,authorization)
-    return {'clients':g.lobby()['online'],'rooms':[{'id':r.id,'phase':r.phase,'mode':r.rules.mode,'round':r.state.rounds if r.state else 0,'players':[g.players[p].name for p in r.players]} for r in g.rooms.values()], 'map_candidates':g.store.db.execute('SELECT COUNT(*) FROM maps').fetchone()[0], 'matches':g.store.db.execute('SELECT COUNT(*) FROM matches').fetchone()[0], 'training_running': bool(g.training and not g.training.done())}
+    g = admin(request, authorization)
+    clients = []
+    for pid in g.connections.values():
+        p = g.players.get(pid)
+        if not pid or not p:
+            continue
+        room = g.rooms.get(p.room)
+        clients.append({'id':pid,'name':p.name,'room':p.room,'score':p.score,'status':room.phase if room else 'lobby'})
+    return {'clients':clients,'rooms':[{'id':r.id,'phase':r.phase,'mode':r.rules.mode,'round':r.state.rounds if r.state else 0,'players':[g.players[p].name for p in r.players]} for r in g.rooms.values()], 'history':g.store.match_history(), 'map_candidates':g.store.db.execute('SELECT COUNT(*) FROM maps').fetchone()[0], 'matches':g.store.db.execute('SELECT COUNT(*) FROM matches').fetchone()[0], 'training_running': bool(g.training and not g.training.done())}
+
+
+@app.post('/api/admin/clients/{player_id}/disconnect')
+async def disconnect_client(player_id: str, request: Request, authorization: str | None = Header(default=None)):
+    g = admin(request, authorization)
+    p = g.players.get(player_id)
+    if not p or not p.socket:
+        raise HTTPException(404,'Client is no longer connected')
+    ws = p.socket
+    room = g.rooms.get(p.room)
+    if room:
+        async with room.lock:
+            if room.match_id:
+                g.store.finish(room.match_id,None,'Client disconnected by server')
+            for pid in room.players:
+                player = g.players.get(pid)
+                if player:
+                    player.room = None
+                if player and player.socket and pid != player_id:
+                    await g.send(player.socket,'room_closed',{'message':f'{p.name} was disconnected by the server. The game was cancelled.'})
+            g.rooms.pop(room.id,None)
+    await g.send(ws,'kicked',{'message':'You were disconnected by the server administrator.'})
+    g.connections.pop(ws,None)
+    p.socket = None
+    await ws.close(code=4003,reason='Disconnected by server administrator')
+    await g.broadcast_lobby()
+    return {'status':'disconnected','player':p.name}
 
 
 @app.post('/api/admin/reset')
 async def reset(request: Request, authorization: str | None = Header(default=None)):
-    g = admin(request,authorization)
+    g = admin(request, authorization)
     for room in list(g.rooms.values()):
         async with room.lock:
             room.phase = 'aborted'
@@ -474,9 +506,35 @@ async def reset(request: Request, authorization: str | None = Header(default=Non
     g.store.reset()
     for p in g.players.values():
         p.score,p.room = 0,None
-    await asyncio.gather(*(g.send(ws,'reset',{}) for ws in list(g.connections)))
+    await asyncio.gather(*(g.send(ws,'reset',{'message':'The host reset all games and scores.'}) for ws in list(g.connections)))
     await g.broadcast_lobby()
     return {'status':'reset'}
+
+
+@app.post('/api/admin/rooms/{room_id}/reset')
+async def reset_room(room_id: str, request: Request, authorization: str | None = Header(default=None)):
+    g = admin(request, authorization)
+    room = g.rooms.get(room_id.upper())
+    if not room:
+        raise HTTPException(404,'Game is no longer active')
+    async with room.lock:
+        if room.match_id:
+            g.store.finish(room.match_id,None,'Game reset by server')
+        room.phase = 'aborted'
+        room.match_id = ''
+        g.store.reset_scores(room.players)
+        sockets = []
+        for pid in room.players:
+            player = g.players.get(pid)
+            if player:
+                player.score = 0
+                player.room = None
+                if player.socket:
+                    sockets.append(player.socket)
+        g.rooms.pop(room.id,None)
+    await asyncio.gather(*(g.send(ws,'reset',{'message':f'Game {room.id} was reset by the host. Your score was reset.'}) for ws in sockets))
+    await g.broadcast_lobby()
+    return {'status':'reset','room':room.id}
 
 
 @app.websocket('/ws')

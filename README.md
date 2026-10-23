@@ -32,16 +32,16 @@ The backend defaults to `escape-plan15.local` and reports its sharing address as
 
 The launcher reads the Mac's current LocalHostName, so it also works if the computer is renamed. The address stays the same across IP changes as long as that hostname stays the same. Keep the host awake and allow local network connections if macOS asks. Guest/campus Wi-Fi can block mDNS or communication between devices; the address is local to the network, not a public website.
 
-The server dashboard and training controls require the token generated at `data/admin-token`. Do not share that token with players or commit it to source control.
+The server dashboard and training controls are available at `/server` on the host address. Local development can leave `ADMIN_TOKEN` empty; public cloud deployments must configure it and enter the same private token in the dashboard.
 
 ## Demo flow
 
-1. Open the Server page and unlock it with `data/admin-token` to show the concurrent client count and list.
+1. Open `/server` on the host computer, unlock cloud controls with the private `ADMIN_TOKEN`, and show the live client count, connected-client list, room activity, and match result history.
 2. Open the game from two computers and enter different nicknames.
 3. Create a Classic room on one computer and join with the six-character room code on the second.
 4. Demonstrate join messages, the Ready check, synchronized 3-second start countdown, randomized 5x5 board, warder-first 10-second turns, clickable legal destinations, Win/Lost result, scores, and two-player rematch agreement.
 5. Show that the prior winner becomes warder in the rematch.
-6. Use the Server page to reset games and scores.
+6. Use the Server page to disconnect a client, reset one room, or reset all games and scores. Reset keeps clients connected and returns affected players to the lobby.
 7. Demonstrate Stage or Special mode with an AI policy, power-ups, all five modifiers, the rollout estimate, and the move coach.
 8. Open AI Lab to show the measured Q-learning curve and saved policy details.
 9. Open Field Guide to explain the named bot styles and the algorithms behind them.

@@ -6,6 +6,8 @@ services:
     restart: unless-stopped
     volumes:
       - game-data:/app/data
+    environment:
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-}
     expose:
       - "8000"
   proxy:

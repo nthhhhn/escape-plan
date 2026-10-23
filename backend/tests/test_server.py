@@ -6,6 +6,8 @@ from fastapi.testclient import TestClient
 from escapeplan import server
 from escapeplan.engine import legal_actions
 
+ADMIN_HEADERS = {'Authorization':'Bearer integration-test-token'}
+
 
 def receive(ws,kind):
     for _ in range(40):
@@ -69,9 +71,22 @@ def test_two_clients_moves_dedupe_rematch_and_reset(client):
         event(a,'rematch',rid='ra');receive(a,'room');receive(b,'room')
         event(b,'rematch',rid='rb');receive(a,'room');receive(b,'room')
         assert r.roles['warder']==winner and r.state.turn=='warder' and r.state.ply==0
-        assert all(g.players[pid].score == 0 for pid in r.players)
-        assert client.post('/api/admin/reset').status_code==403
-        assert client.post('/api/admin/reset',headers={'Authorization':'Bearer integration-test-token'}).status_code==200
+        assert g.players[winner].score == 1
+        assert sum(g.players[pid].score for pid in r.players) == 1
+        # The same player wins the next round; the series score must accumulate.
+        r.phase='playing';r.deadline=time.monotonic()+10
+        r.state.positions['warder']=0;r.state.positions['prisoner']=1
+        r.state.tiles=['.']*25
+        repeat_winner=a if winner==pa['id'] else b
+        event(repeat_winner,'action',{'kind':'move','direction':'right'},'round-two',match_id=r.match_id,turn_id=0)
+        receive(a,'room');receive(b,'room')
+        assert g.players[winner].score == 2
+        assert sum(g.players[pid].score for pid in r.players) == 2
+        assert client.get('/api/admin').status_code == 403
+        admin = client.get('/api/admin',headers=ADMIN_HEADERS).json()
+        assert admin['history'][0]['status'] == 'finished'
+        assert admin['history'][0]['winner'] in ('Alice','Bob')
+        assert client.post('/api/admin/reset',headers=ADMIN_HEADERS).status_code==200
         receive(a,'reset');receive(b,'reset')
         assert not g.rooms and all(p.score==0 for p in g.players.values())
 
@@ -124,3 +139,50 @@ def test_websocket_rejects_cross_origin(client):
     from starlette.websockets import WebSocketDisconnect
     with pytest.raises(WebSocketDisconnect):
         with client.websocket_connect('/ws',headers={'origin':'https://untrusted.example'}):pass
+
+
+def test_admin_can_disconnect_client_and_cancel_room(client):
+    with client.websocket_connect('/ws') as a, client.websocket_connect('/ws') as b:
+        pa=identify(a,'Alice');identify(b,'Bob')
+        event(a,'create_room',{'mode':'classic','analysis':False},'create')
+        room=receive(a,'room')['payload']
+        event(b,'join_room',{'id':room['id']},'join')
+        receive(a,'room');receive(b,'room')
+        response=client.post(f"/api/admin/clients/{pa['id']}/disconnect",headers=ADMIN_HEADERS)
+        assert response.status_code==200
+        assert receive(a,'kicked')['payload']['message'].startswith('You were disconnected')
+        closed=receive(b,'room_closed')['payload']
+        assert 'game was cancelled' in closed['message']
+        assert not client.app.state.game.rooms
+        admin=client.get('/api/admin',headers=ADMIN_HEADERS).json()
+        assert [p['name'] for p in admin['clients']]==['Bob']
+
+
+def test_admin_can_reset_one_game_without_affecting_another(client):
+    with client.websocket_connect('/ws') as a, client.websocket_connect('/ws') as b, client.websocket_connect('/ws') as c:
+        pa=identify(a,'Alice');pb=identify(b,'Bob');pc=identify(c,'Carol')
+        event(a,'create_room',{'mode':'classic','analysis':False},'create-a')
+        first=receive(a,'room')['payload']
+        event(b,'join_room',{'id':first['id']},'join-b')
+        receive(a,'room');receive(b,'room')
+        event(a,'ready',rid='ready-a');receive(a,'room');receive(b,'room')
+        event(b,'ready',rid='ready-b');receive(a,'room');receive(b,'room')
+        event(c,'create_room',{'mode':'classic','analysis':False},'create-c')
+        second=receive(c,'room')['payload']
+        game=client.app.state.game
+        for pid,score in ((pa['id'],4),(pb['id'],5),(pc['id'],7)):
+            game.players[pid].score=score
+            game.store.db.execute('UPDATE players SET score=? WHERE id=?',(score,pid))
+        game.store.db.commit()
+
+        response=client.post(f"/api/admin/rooms/{first['id']}/reset",headers=ADMIN_HEADERS)
+        assert response.status_code==200
+        assert 'was reset by the host' in receive(a,'reset')['payload']['message']
+        assert 'was reset by the host' in receive(b,'reset')['payload']['message']
+        assert first['id'] not in game.rooms and second['id'] in game.rooms
+        assert game.players[pa['id']].score==game.players[pb['id']].score==0
+        assert game.players[pc['id']].score==7 and game.players[pc['id']].room==second['id']
+        saved=dict(game.store.db.execute('SELECT id,score FROM players'))
+        assert saved[pa['id']]==saved[pb['id']]==0 and saved[pc['id']]==7
+        history=game.store.match_history()
+        assert history[0]['reason']=='Game reset by server'
