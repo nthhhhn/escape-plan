@@ -82,7 +82,11 @@ Caddy obtains HTTPS certificates and proxies HTTP and WebSocket traffic to the s
 
 Do not increase the Uvicorn worker count while live matches are stored in process memory. Horizontal scaling would require shared match state and coordinated timers.
 
-Cloud resources are not provisioned automatically because an AWS or GCP account, billing configuration, DNS name, and provider choice are required.
+The demonstration deployment is live on GCP Compute Engine at
+`https://34.21.135.108.nip.io`. It uses an `e2-small` VM in Singapore
+(`asia-southeast1-c`), a 10 GB standard persistent disk, Docker Compose, and an
+ephemeral public IP. The `/server` dashboard requires the private token stored
+on the VM at `/var/lib/escape-plan-admin-token`; never commit that value.
 
 ## Important files
 

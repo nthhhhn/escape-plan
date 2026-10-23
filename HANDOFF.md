@@ -1,6 +1,32 @@
 # Escape Plan handoff
 
-Updated: 2026-10-09 (Asia/Bangkok), completed offline atlas
+Updated: 2026-10-23 (Asia/Bangkok), GCP demonstration deployment live
+
+## Live demonstration deployment
+
+Escape Plan is deployed at **https://34.21.135.108.nip.io** in GCP project
+`escape-plan-512508`. The VM is `escape-plan-demo`, zone
+`asia-southeast1-c` (Singapore), type `e2-small` (2 shared vCPUs, 2 GB RAM),
+with a 10 GB standard persistent disk and ephemeral external IP
+`34.21.135.108`. HTTP redirects to HTTPS, the TLS health endpoint returns 200,
+and both the game and Caddy containers are running with `restart:
+unless-stopped`.
+
+The cloud `/server` dashboard is protected by `ADMIN_TOKEN`. Its value is stored
+only on the VM at `/var/lib/escape-plan-admin-token` and in
+`/opt/escape-plan/.env`; do not commit or paste it into project files. Retrieve
+it through GCP SSH with `sudo cat /var/lib/escape-plan-admin-token` when needed.
+
+The first metadata startup run hit Debian's package-manager lock while the OS
+updater was active. Deployment was rerun successfully after waiting for
+`/var/lib/dpkg/lock-frontend`. If the VM is rebuilt, keep that wait before
+`apt-get`. The repository checkout on the VM is `/opt/escape-plan`.
+
+The console estimate shown at creation was **US$15.53/month** for the VM and
+disk, plus the public IPv4 charge. The account showed **฿10,077.76** of free
+trial credit with 90 days remaining on 2026-10-23. Stop or delete the VM after
+the November 6 demonstration to prevent continued charges; deleting the VM is
+configured to delete its boot disk as well.
 
 Documentation follow-up: added `map_lab/README.md` as the entry point linking the actual Python scripts, full methodology, generation commands, database schema and compressed 30,000-map snapshot. Linked it from the project README and showcase README. Rechecked local database counts and integrity. The completed artifact was pushed as `cafe95b`; this follow-up makes its code and data provenance easier to find.
 
