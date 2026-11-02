@@ -22,7 +22,8 @@ def map_geometry_ok(state):
                 q.append(nxt)
     if len(seen) != len(free):
         return False
-    if len(state.tunnels) < 2:
+    expected_tunnel_count = 3 if 'fake' in state.rules.modifiers else 1
+    if len(state.tunnels) != expected_tunnel_count:
         return False
     entrances = {n for tunnel in state.tunnels for n in neighbors(tunnel, size) if state.tiles[n] == '.'}
     if len(entrances) < 2:
@@ -123,7 +124,7 @@ def test_generated_maps(size,count,mods):
     for seed in range(15):
         s=generate(Rules(mode='special',size=size,modifiers=mods,powers='both'),seed)
         assert s.tiles.count('#')==count
-        assert len(s.tunnels)==(3 if 'fake' in mods else 2)
+        assert len(s.tunnels)==(3 if 'fake' in mods else 1)
         assert connected(s)
         assert s.positions['warder']!=s.positions['prisoner']
         assert not set(s.positions.values())&set(s.tunnels)

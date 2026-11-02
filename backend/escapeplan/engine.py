@@ -222,10 +222,9 @@ def generate(rules: Rules, seed: int) -> State:
         rng.shuffle(cells)
         count = {5: 5, 7: 10, 9: 16}[size]
         obstacles = set(cells[:count])
-        # The assignment's Classic board is exactly 5x5: 19 free cells,
-        # 5 obstacles, and one prisoner-only tunnel. Decoy tunnels remain
-        # an enhanced-mode feature.
-        tunnel_count = 1 if rules.mode == 'classic' else 3 if 'fake' in rules.modifiers else 2
+        # Every standard board has one prisoner-only tunnel. Selecting the
+        # False exits modifier adds two decoys, for three tunnels total.
+        tunnel_count = 3 if 'fake' in rules.modifiers else 1
         tunnels = cells[count:count + tunnel_count]
         floors = [c for c in cells if c not in obstacles and c not in tunnels]
         warders = [c for c in floors if all(abs(c // size - t // size) + abs(c % size - t % size) >= 3 for t in tunnels)]
