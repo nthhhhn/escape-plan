@@ -88,6 +88,13 @@ The demonstration deployment is live on GCP Compute Engine at
 ephemeral public IP. The `/server` dashboard requires the private token stored
 on the VM at `/var/lib/escape-plan-admin-token`; never commit that value.
 
+Pushes to `main` are tested and deployed by `.github/workflows/deploy-gcp.yml`.
+The workflow uses a deployment-only SSH key whose forced command is
+`deploy/gcp-deploy.sh`; it cannot open an interactive shell. The production
+environment stores `GCP_VM_HOST`, `GCP_SSH_HOST_KEY`, and
+`GCP_DEPLOY_PRIVATE_KEY`. A deployment only accepts the exact current
+`origin/main` commit, rebuilds the Compose services, and checks `/api/health`.
+
 ## Important files
 
 - `backend/escapeplan/engine.py`: shared deterministic rules engine
