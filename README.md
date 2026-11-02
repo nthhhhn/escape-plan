@@ -107,7 +107,7 @@ rebuilds the Compose services, and checks `/api/health`.
 - `frontend/src/revision.css`: board-first visual redesign and responsive layouts
 - `PROJECT_PLAN.md`: architecture, feature interactions, and requirement mapping
 - `deploy/`: Docker and HTTPS reverse-proxy configuration
-- `CONNECTION_DEMO_HANDOFF.md`: complete local, LAN, GCP, server-client, deployment, and demo handoff
+- `CONNECTION_HANDOFF.md`: complete local, LAN, GCP, server-client, deployment, security, and troubleshooting handoff
 
 ## Design boundaries
 
