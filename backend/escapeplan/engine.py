@@ -101,10 +101,11 @@ def walkable(s: State, cell: int, role: str, unlocked: bool | None = None) -> bo
         return False
     if cell in s.tunnels:
         if role == 'warder':
-            # Classic is the assignment ruleset: the tunnel is exclusively
-            # the prisoner's escape route. Enhanced modes retain their own
-            # tunnel behaviour.
-            return s.rules.mode != 'classic'
+            return False
+        # Fake tunnels are passable decoys. Only the real tunnel is an exit
+        # and, when a key is enabled, only that exit requires the key.
+        if cell != s.real_tunnel:
+            return True
         return s.has_key if unlocked is None else unlocked
     return True
 
@@ -134,12 +135,12 @@ def connected(s: State) -> bool:
 def distance(s: State, start: int, goal: int, role: str, algorithm: str = 'bfs') -> int:
     return route_distance(
         tuple(s.tiles), tuple(sorted(s.roadblocks)), s.has_key,
-        s.rules.mode != 'classic', s.rules.size, start, goal, role, algorithm,
+        s.real_tunnel, s.rules.size, start, goal, role, algorithm,
     )
 
 
 @lru_cache(maxsize=20000)
-def route_distance(tiles, blocks, unlocked, warder_tunnels, size, start, goal, role, algorithm):
+def route_distance(tiles, blocks, unlocked, real_tunnel, size, start, goal, role, algorithm):
     if start == goal:
         return 0
     # Both policies use the same movement permissions. A* prioritizes Manhattan distance.
@@ -151,7 +152,7 @@ def route_distance(tiles, blocks, unlocked, warder_tunnels, size, start, goal, r
             return False
         if tiles[cell] != 'T':
             return True
-        return (role == 'warder' and warder_tunnels) or (role == 'prisoner' and (unlocked if unlocked is not None else False))
+        return role == 'prisoner' and (cell != real_tunnel or (unlocked if unlocked is not None else False))
     if algorithm == 'bfs':
         queue = deque([(start, 0)])
         seen = {start}
@@ -464,15 +465,6 @@ def apply_action(original: State, action: dict, *, timeout: bool = False) -> Sta
     if not s.winner and role == 'warder' and 'relocate' in s.rules.modifiers:
         shift_tunnels(s)
     s.roadblocks = {c: end for c, end in s.roadblocks.items() if end > s.ply}
-    if not s.winner and s.ply % 6 == 0 and 'shrink' in s.rules.modifiers:
-        eligible = [i for i, t in enumerate(s.tiles) if t == '.' and i not in s.roadblocks and not protected(s, i)]
-        random.Random(s.seed + s.ply * 997).shuffle(eligible)
-        for cell in eligible:
-            s.tiles[cell] = '#'
-            if connected(s):
-                s.last_event += ' A floor collapsed.'
-                break
-            s.tiles[cell] = '.'
     if not s.winner and 'shrink' in s.rules.modifiers and s.rounds >= 60:
         s.winner, s.reason = 'warder', 'Containment: the 60-round limit was reached.'
     s.turn = 'prisoner' if role == 'warder' else 'warder'
@@ -536,6 +528,6 @@ def determinize(view: dict, seed: int) -> State:
     if data['real_tunnel'] is None:
         data['real_tunnel'] = rng.choice(data['tunnels'])
     if data['positions']['prisoner'] is None:
-        candidates = [i for i, tile in enumerate(data['tiles']) if tile != '#' and i not in data['roadblocks'] and i != data['positions']['warder'] and (tile != 'T' or data['has_key'])]
+        candidates = [i for i, tile in enumerate(data['tiles']) if tile != '#' and i not in data['roadblocks'] and i != data['positions']['warder'] and (tile != 'T' or i != data['real_tunnel'] or data['has_key'])]
         data['positions']['prisoner'] = rng.choice(candidates)
     return State(rules=rules, seed=seed, **data)

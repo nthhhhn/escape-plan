@@ -155,8 +155,8 @@ def test_moves_capture_escape_and_immutability():
     s=arena();s.turn='prisoner';s.positions['prisoner']=23
     assert apply_action(s,{'kind':'move','direction':'right'}).winner=='prisoner'
     s=arena();s.turn='warder';s.positions['warder']=23
-    end=apply_action(s,{'kind':'move','direction':'right'})
-    assert end.positions['warder']==24 and end.turn=='prisoner'
+    with pytest.raises(ValueError, match='blocked'):
+        apply_action(s,{'kind':'move','direction':'right'})
     s=arena();s.turn='prisoner';s.positions['prisoner']=23;s.has_key=False
     with pytest.raises(ValueError):apply_action(s,{'kind':'move','direction':'right'})
 
@@ -219,6 +219,16 @@ def test_key_fake_tunnels_and_sprint_collision():
     assert s.winner=='warder' and s.positions['prisoner']==11
 
 
+def test_fake_tunnels_are_passable_for_prisoner_and_hidden_from_warder():
+    s=arena(['fake','key']);s.tunnels=[23,24];s.tiles[23]='T';s.real_tunnel=24;s.key=17;s.has_key=False;s.turn='prisoner';s.positions['prisoner']=22
+    end=apply_action(s,{'kind':'move','direction':'right'})
+    assert end.positions['prisoner']==23 and not end.winner
+    assert observation(end,'warder')['real_tunnel'] is None
+    end.turn='warder';end.positions['warder']=22
+    with pytest.raises(ValueError, match='blocked'):
+        apply_action(end,{'kind':'move','direction':'right'})
+
+
 def test_sprint_rolls_back_if_second_step_blocked():
     s=arena();s.turn='prisoner';s.tiles[14]='#'
     with pytest.raises(ValueError):apply_action(s,{'kind':'sprint','direction':'right'})
@@ -249,8 +259,9 @@ def test_terrain_cannot_isolate_floor():
 
 def test_shrink_timer_and_containment():
     s=arena(['shrink','timer']);s.ply=5;s.turn='prisoner'
+    before=s.tiles.copy()
     s=apply_action(s,{'kind':'pass'},timeout=True)
-    assert s.tiles.count('#')==1 and connected(s) and s.seconds==9
+    assert s.tiles==before and connected(s) and s.seconds==9
     s.ply=119;s.turn='prisoner'
     s=apply_action(s,{'kind':'pass'},timeout=True)
     assert s.winner=='warder' and s.seconds==5

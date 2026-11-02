@@ -9,7 +9,7 @@ const MODS = [
   {id:'shift',label:'Moving walls',text:'Push an obstacle instead of moving.',icon:Layers},
   {id:'key',label:'Lock & key',text:'Find the key before your escape.',icon:KeyRound},
   {id:'fake',label:'False exits',text:'Three tunnels. Only one way out.',icon:DoorOpen},
-  {id:'shrink',label:'Closing in',text:'A floor collapses every three rounds.',icon:Square},
+  {id:'shrink',label:'Containment limit',text:'After 60 rounds, the warder wins. Terrain stays fixed.',icon:Square},
   {id:'relocate',label:'Shifting escape tunnel',text:'Camp near an exit for three turns and it shifts.',icon:DoorOpen},
   {id:'timer',label:'Against the clock',text:'Your turn shrinks from 10s to 5s.',icon:Timer},
 ];
