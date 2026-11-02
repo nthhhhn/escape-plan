@@ -9,12 +9,14 @@ import json
 import os
 from pathlib import Path
 import secrets
+import shutil
 import time
 from uuid import uuid4
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Header, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from fastapi.middleware.cors import CORSMiddleware
 from .engine import Rules, State, generate, apply_action, observation, legal_actions
 from .ai import choose, analyze_pair, train
 from .storage import Store
@@ -26,6 +28,15 @@ DATA = Path(os.environ.get('ESCAPE_DATA', str(ROOT/'data')))
 # its actual hostname so a rename or Bonjour conflict can be reflected here.
 LAN_HOST = os.environ.get('ESCAPE_LAN_HOST', 'escape-plan15.local')
 LAN_URL = f'http://{LAN_HOST}:8000'
+PRETRAINED = Path(__file__).resolve().parent/'pretrained'
+
+
+def allowed_origins():
+    # Explicit frontend origins for source-defined local/LAN endpoints.
+    # Additional deployments can extend this list without allowing arbitrary sites.
+    return [LAN_URL, 'http://127.0.0.1:8000', 'http://localhost:8000',
+            'http://127.0.0.1:5173', 'http://localhost:5173',
+            *[value.strip() for value in os.environ.get('ALLOWED_ORIGINS', '').split(',') if value.strip()]]
 
 
 @dataclass
@@ -76,6 +87,14 @@ def bot_name(rules):
 class GameServer:
     def __init__(self):
         self.store = Store(DATA)
+        # A fresh installation starts with the demonstrated policy and its measured
+        # curve. Training through AI Lab replaces these runtime copies without
+        # modifying the packaged starter files.
+        for name in ('q-model.json', 'training.json'):
+            target = DATA/name
+            source = PRETRAINED/name
+            if not target.exists() and source.exists():
+                shutil.copyfile(source, target)
         # Keep LAN-only development convenient, but require a bearer token
         # whenever ADMIN_TOKEN is configured (as it is in cloud deployment).
         self.admin_token = os.environ.get('ADMIN_TOKEN', '').strip()
@@ -244,9 +263,11 @@ class GameServer:
             for room in list(self.rooms.values()):
                 if room.phase == 'paused' and time.monotonic()-room.disconnected_at >= 20:
                     async with room.lock:
-                        room.phase = 'aborted'
-                        self.store.finish(room.match_id,None,'Reconnect window expired')
-                        await self.publish(room)
+                        if room.phase == 'paused' and time.monotonic()-room.disconnected_at >= 20:
+                            room.phase = 'aborted'
+                            self.store.finish(room.match_id,None,'Reconnect window expired')
+                            await self.publish(room)
+                            self.collect_room(room)
                 if room.phase == 'countdown' and time.monotonic() >= room.deadline:
                     async with room.lock:
                         if room.phase == 'countdown':
@@ -270,6 +291,25 @@ class GameServer:
                             room.analysis_busy.add(pid)
                             self.task(self.analysis(room,pid,room.match_id,room.state.ply))
 
+    def remove_room(self, room):
+        self.rooms.pop(room.id, None)
+        # Invalidate outstanding bot/analysis work before releasing its players.
+        room.phase = 'aborted'
+        room.match_id = ''
+        for pid in room.players:
+            player = self.players.get(pid)
+            if player and player.room == room.id:
+                player.room = None
+            if pid.startswith('bot-'):
+                self.players.pop(pid, None)
+
+    def collect_room(self, room):
+        # Active matches retain the full reconnect window even if both tabs close.
+        if room.phase in ('waiting', 'ready', 'finished', 'aborted') and not any(
+            self.players[pid].socket for pid in room.players if not pid.startswith('bot-')
+        ):
+            self.remove_room(room)
+
     async def leave(self, p):
         room = self.rooms.get(p.room)
         if room:
@@ -280,9 +320,10 @@ class GameServer:
                     await self.publish(room)
                 room.players = [pid for pid in room.players if pid != p.id]
                 if not room.players or all(pid.startswith('bot-') for pid in room.players) or room.phase == 'waiting':
-                    self.rooms.pop(room.id,None)
+                    self.remove_room(room)
                 else:
                     await self.publish(room)
+                    self.collect_room(room)
         p.room = None
         if p.socket:
             await self.send(p.socket,'left',{})
@@ -408,6 +449,9 @@ async def lifespan(app):
 
 
 app = FastAPI(title='Escape Plan',lifespan=lifespan)
+app.add_middleware(CORSMiddleware, allow_origins=allowed_origins(),
+                   allow_methods=['GET', 'POST'],
+                   allow_headers=['Authorization', 'Content-Type'])
 
 
 def admin(request: Request, authorization: str | None):
@@ -542,7 +586,7 @@ async def websocket(ws: WebSocket):
     # Reject cross-site browser socket hijacking. Same-origin works through Vite/proxy.
     origin = ws.headers.get('origin')
     host = ws.headers.get('host')
-    allowed = os.environ.get('ALLOWED_ORIGINS','').split(',')
+    allowed = allowed_origins()
     from urllib.parse import urlparse
     if origin and urlparse(origin).netloc != host and origin not in allowed:
         await ws.close(code=1008)
@@ -630,10 +674,8 @@ async def disconnect(g, ws, p):
                     room.phase = 'paused'
                 elif room.phase == 'ready':
                     room.ready.discard(p.id)
-                elif room.phase == 'waiting':
-                    g.rooms.pop(room.id,None)
-                    p.room = None
                 await g.publish(room)
+                g.collect_room(room)
     await g.broadcast_lobby()
 
 

@@ -26,7 +26,7 @@ Open `http://127.0.0.1:8000` on the server computer.
 
 For everyday play on this Mac, double-click **Play Escape Plan.command**. It reuses an existing game server or starts the installed build, opens the game, and prints the address to share. Keep its Terminal window open when it starts the server; Control-C stops it. Run `./scripts/start.sh` after code/dependency updates to rebuild.
 
-For two computers on the same network, open **http://escape-plan15.local:8000/** on both. This Mac publishes that hostname through macOS Bonjour/mDNS; no backend discovery service or IP lookup is required. Keep `PROFILE` as `local`: API and WebSocket connections follow the browser's hostname automatically.
+For two computers on the same network, open **http://escape-plan15.local:8000/** on both. This Mac publishes that hostname through macOS Bonjour/mDNS; no backend discovery service or IP lookup is required. Production LAN builds select the source-defined `lan` endpoint in `frontend/src/config.ts`; players never enter an address or port.
 
 The backend defaults to `escape-plan15.local` and reports its sharing address as `lan_url` in `/api/health`. The launcher supplies the Mac's current hostname through `ESCAPE_LAN_HOST`. This setting describes the address; Bonjour on the hosting Mac performs discovery. A different hosting computer must separately publish its own hostname.
 
@@ -68,6 +68,10 @@ PYTHONPATH=backend .venv/bin/python -m escapeplan.train \
 
 This writes `data/q-model.json` and `data/training.json`. The graph displays actual held-out evaluations. It does not fabricate an improvement curve.
 
+A fresh installation seeds those runtime files from the packaged 5,000-episode
+5×5, powers-off, no-modifier starter policy. A later AI Lab or command-line run
+replaces the runtime copies while leaving the packaged fallback unchanged.
+
 ## Cloud deployment
 
 The project is prepared for one AWS EC2 or GCP Compute Engine VM. The VM needs Docker, Docker Compose, a public IP, and a DNS record pointing to it.
@@ -87,6 +91,10 @@ The demonstration deployment is live on GCP Compute Engine at
 (`asia-southeast1-c`), a 10 GB standard persistent disk, Docker Compose, and an
 ephemeral public IP. The `/server` dashboard requires the private token stored
 on the VM at `/var/lib/escape-plan-admin-token`; never commit that value.
+
+The Docker build selects the `cloud` endpoint from `frontend/src/config.ts`.
+If the VM's ephemeral IP changes, update `CLOUD_IP`, rebuild, and update bookmarks.
+A reserved static IP avoids that demo-day failure mode.
 
 Pushes to `main` are tested and deployed by `.github/workflows/deploy-gcp.yml`.
 The workflow uses a deployment-only SSH key whose forced command is

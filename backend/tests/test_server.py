@@ -186,3 +186,112 @@ def test_admin_can_reset_one_game_without_affecting_another(client):
         assert saved[pa['id']]==saved[pb['id']]==0 and saved[pc['id']]==7
         history=game.store.match_history()
         assert history[0]['reason']=='Game reset by server'
+
+
+def wait_until(client, predicate):
+    import asyncio
+
+    async def check():
+        for _ in range(200):
+            if predicate():
+                return
+            await asyncio.sleep(.01)
+        raise AssertionError('Server did not reach the expected state')
+
+    client.portal.call(check)
+
+
+@pytest.mark.parametrize('phase', ['waiting', 'ready', 'finished', 'aborted'])
+def test_abandoned_rooms_do_not_exhaust_capacity(client, phase):
+    game = client.app.state.game
+    for index in range(13):
+        with client.websocket_connect('/ws') as ws:
+            player = identify(ws, f'Player {index}')
+            event(ws, 'create_room', {'mode': 'classic'} if phase == 'waiting' else
+                  {'mode': 'stage', 'bot': 'easy'}, f'create-{index}')
+            view = receive(ws, 'room')['payload']
+            room = game.rooms[view['id']]
+            # Isolate terminal cleanup from the separately tested game rules.
+            room.phase = phase
+            bot_ids = [pid for pid in room.players if pid.startswith('bot-')]
+        wait_until(client, lambda: view['id'] not in game.rooms)
+        assert game.players[player['id']].room is None
+        assert all(pid not in game.players for pid in bot_ids)
+    assert not game.rooms
+
+
+def test_empty_active_room_keeps_reconnect_window_then_releases_capacity(client):
+    game = client.app.state.game
+    with client.websocket_connect('/ws') as ws:
+        player = identify(ws, 'Solo')
+        event(ws, 'create_room', {'mode': 'stage', 'bot': 'easy'}, 'create')
+        view = receive(ws, 'room')['payload']
+        event(ws, 'ready', rid='ready')
+        receive(ws, 'room')
+        room = game.rooms[view['id']]
+        match_id = room.match_id
+    wait_until(client, lambda: room.phase == 'paused')
+    assert view['id'] in game.rooms
+    # Returning before expiry must retain the original match and role.
+    with client.websocket_connect('/ws') as resumed:
+        identify(resumed, 'Solo', player['token'])
+        restored = receive(resumed, 'room')['payload']
+        assert restored['match_id'] == match_id
+        assert restored['phase'] == 'countdown'
+    wait_until(client, lambda: room.phase == 'paused')
+    room.disconnected_at = time.monotonic() - 21
+    wait_until(client, lambda: view['id'] not in game.rooms)
+    assert game.players[player['id']].room is None
+    assert game.store.db.execute('SELECT status,winner FROM matches WHERE id=?',
+                                 (match_id,)).fetchone() == ('aborted', None)
+
+
+def test_finished_room_is_retained_for_connected_player(client):
+    game = client.app.state.game
+    with client.websocket_connect('/ws') as a:
+        pa = identify(a, 'Alice')
+        event(a, 'create_room', {'mode': 'classic'}, 'create')
+        view = receive(a, 'room')['payload']
+        with client.websocket_connect('/ws') as b:
+            pb = identify(b, 'Bob')
+            event(b, 'join_room', {'id': view['id']}, 'join')
+            receive(a, 'room'); receive(b, 'room')
+            game.rooms[view['id']].phase = 'finished'
+        wait_until(client, lambda: game.players[pb['id']].socket is None)
+        assert view['id'] in game.rooms
+        assert game.players[pa['id']].room == view['id']
+    wait_until(client, lambda: view['id'] not in game.rooms)
+    assert game.players[pa['id']].room is game.players[pb['id']].room is None
+
+
+def test_source_defined_endpoint_accepts_trusted_frontend_origin(client):
+    origin = 'http://localhost:5173'
+    with client.websocket_connect('/ws', headers={'origin': origin}) as ws:
+        assert identify(ws, 'LAN player')['nickname'] == 'LAN player'
+    response = client.options('/api/admin/reset', headers={
+        'Origin': origin, 'Access-Control-Request-Method': 'POST',
+        'Access-Control-Request-Headers': 'authorization,content-type'})
+    assert response.status_code == 200
+    assert response.headers['access-control-allow-origin'] == origin
+    response = client.get('/api/training', headers={'Origin': origin})
+    assert response.headers['access-control-allow-origin'] == origin
+    # Cross-origin access never bypasses the admin token check.
+    assert client.post('/api/admin/reset', headers={'Origin': origin}).status_code == 403
+    rejected = client.options('/api/admin/reset', headers={
+        'Origin': 'https://untrusted.example', 'Access-Control-Request-Method': 'POST'})
+    assert rejected.status_code == 400
+    assert 'access-control-allow-origin' not in rejected.headers
+
+
+def test_fresh_server_seeds_pretrained_q_policy(client):
+    game = client.app.state.game
+    model = __import__('json').loads((server.DATA/'q-model.json').read_text())
+    status = client.get('/api/training').json()
+    assert status['status'] == 'complete'
+    assert model['episodes'] == status['episodes'] == 5000
+    assert model['coverage'] == status['coverage'] == {
+        'size': 5, 'modifiers': [], 'powers': 'off',
+        'personality': 'planner', 'schema': 2,
+    }
+    assert len(model['q']) == status['states'] == 21954
+    assert game.training is None
