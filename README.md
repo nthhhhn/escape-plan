@@ -91,9 +91,10 @@ on the VM at `/var/lib/escape-plan-admin-token`; never commit that value.
 Pushes to `main` are tested and deployed by `.github/workflows/deploy-gcp.yml`.
 The workflow uses a deployment-only SSH key whose forced command is
 `deploy/gcp-deploy.sh`; it cannot open an interactive shell. The production
-environment stores `GCP_VM_HOST`, `GCP_SSH_HOST_KEY`, and
-`GCP_DEPLOY_PRIVATE_KEY`. A deployment only accepts the exact current
-`origin/main` commit, rebuilds the Compose services, and checks `/api/health`.
+environment stores `GCP_VM_HOST` and `GCP_DEPLOY_PRIVATE_KEY`. The VM's public
+SSH host-key fingerprint is pinned in the workflow and verified before every
+connection. A deployment only accepts the exact current `origin/main` commit,
+rebuilds the Compose services, and checks `/api/health`.
 
 ## Important files
 
