@@ -101,7 +101,10 @@ def walkable(s: State, cell: int, role: str, unlocked: bool | None = None) -> bo
         return False
     if cell in s.tunnels:
         if role == 'warder':
-            return True
+            # Classic is the assignment ruleset: the tunnel is exclusively
+            # the prisoner's escape route. Enhanced modes retain their own
+            # tunnel behaviour.
+            return s.rules.mode != 'classic'
         return s.has_key if unlocked is None else unlocked
     return True
 
@@ -129,11 +132,14 @@ def connected(s: State) -> bool:
 
 
 def distance(s: State, start: int, goal: int, role: str, algorithm: str = 'bfs') -> int:
-    return route_distance(tuple(s.tiles), tuple(sorted(s.roadblocks)), s.has_key, s.rules.size, start, goal, role, algorithm)
+    return route_distance(
+        tuple(s.tiles), tuple(sorted(s.roadblocks)), s.has_key,
+        s.rules.mode != 'classic', s.rules.size, start, goal, role, algorithm,
+    )
 
 
 @lru_cache(maxsize=20000)
-def route_distance(tiles, blocks, unlocked, size, start, goal, role, algorithm):
+def route_distance(tiles, blocks, unlocked, warder_tunnels, size, start, goal, role, algorithm):
     if start == goal:
         return 0
     # Both policies use the same movement permissions. A* prioritizes Manhattan distance.
@@ -145,7 +151,7 @@ def route_distance(tiles, blocks, unlocked, size, start, goal, role, algorithm):
             return False
         if tiles[cell] != 'T':
             return True
-        return role == 'warder' or (role == 'prisoner' and (unlocked if unlocked is not None else False))
+        return (role == 'warder' and warder_tunnels) or (role == 'prisoner' and (unlocked if unlocked is not None else False))
     if algorithm == 'bfs':
         queue = deque([(start, 0)])
         seen = {start}
@@ -215,7 +221,10 @@ def generate(rules: Rules, seed: int) -> State:
         rng.shuffle(cells)
         count = {5: 5, 7: 10, 9: 16}[size]
         obstacles = set(cells[:count])
-        tunnel_count = 3 if 'fake' in rules.modifiers else 2
+        # The assignment's Classic board is exactly 5x5: 19 free cells,
+        # 5 obstacles, and one prisoner-only tunnel. Decoy tunnels remain
+        # an enhanced-mode feature.
+        tunnel_count = 1 if rules.mode == 'classic' else 3 if 'fake' in rules.modifiers else 2
         tunnels = cells[count:count + tunnel_count]
         floors = [c for c in cells if c not in obstacles and c not in tunnels]
         warders = [c for c in floors if all(abs(c // size - t // size) + abs(c % size - t % size) >= 3 for t in tunnels)]

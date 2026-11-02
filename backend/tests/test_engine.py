@@ -134,7 +134,17 @@ def test_classic_cannot_enable_extras():
     r=Rules.parse({'mode':'classic','size':9,'bot':'hard','powers':'both','modifiers':['fake']})
     assert (r.size,r.bot,r.powers,r.modifiers)==(5,'','off',[])
     s=generate(r,1)
-    assert s.tiles.count('.')==18
+    assert s.tiles.count('.')==19
+    assert s.tiles.count('#')==5
+    assert len(s.tunnels)==1
+
+
+def test_classic_warder_cannot_enter_tunnel_or_route_through_it():
+    s=State(Rules(),123,['.']*24+['T'],{'warder':23,'prisoner':12},[24],24,has_key=True,charges={'warder':{'radar':0,'roadblock':0},'prisoner':{'dig':0,'sprint':0,'smoke':0}})
+    with pytest.raises(ValueError, match='blocked'):
+        apply_action(s,{'kind':'move','direction':'right'})
+    assert s.positions['warder']==23 and s.turn=='warder'
+    assert distance(s,23,24,'warder')==25
 
 
 def test_moves_capture_escape_and_immutability():
