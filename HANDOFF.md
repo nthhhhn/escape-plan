@@ -2,6 +2,10 @@
 
 Updated: 2026-11-02 (Asia/Bangkok), GitHub-to-GCP deployment automated
 
+## Extra-feature presentation handoff
+
+`EXTRA_FEATURES.md` now contains the instructor-facing feature choices and demonstration plan. The recommended 10-point package uses one AI feature (Q-learning, 2 points) and eight non-AI features (1 point each). It also lists more than 40 implemented alternatives with a short demonstration action, plus easiest, visual, and technical feature sets so the team can choose what to present.
+
 ## Live demonstration deployment
 
 Escape Plan is deployed at **https://34.21.135.108.nip.io** in GCP project
