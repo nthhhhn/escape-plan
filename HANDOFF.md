@@ -1,6 +1,6 @@
 # Escape Plan handoff
 
-Updated: 2026-10-23 (Asia/Bangkok), GCP demonstration deployment live
+Updated: 2026-11-02 (Asia/Bangkok), GitHub-to-GCP deployment automated
 
 ## Live demonstration deployment
 
@@ -22,6 +22,16 @@ updater was active. Deployment was rerun successfully after waiting for
 `/var/lib/dpkg/lock-frontend`. If the VM is rebuilt, keep that wait before
 `apt-get`. The repository checkout on the VM is `/opt/escape-plan`.
 
+Pushes to `main` now run `.github/workflows/deploy-gcp.yml`. GitHub Actions
+tests the backend and frontend, verifies the VM's pinned ED25519 host-key
+fingerprint, and connects with a deployment-only SSH key. That key is forced to
+run `/usr/local/sbin/escape-plan-deploy`, so it cannot open an interactive
+shell. The VM accepts only the exact current `origin/main` commit, rebuilds the
+Compose services, and checks `/api/health`. The first complete automated run,
+GitHub Actions run `41408935974`, deployed commit `9d1a1e8` successfully on
+2026-11-02. A separate public HTTPS check returned `{"status":"ok"}` and the
+homepage returned HTTP 200.
+
 The console estimate shown at creation was **US$15.53/month** for the VM and
 disk, plus the public IPv4 charge. The account showed **฿10,077.76** of free
 trial credit with 90 days remaining on 2026-10-23. Stop or delete the VM after
@@ -32,7 +42,7 @@ Documentation follow-up: added `map_lab/README.md` as the entry point linking th
 
 ## Current status
 
-The game source, launcher, documentation and deployment files are on GitHub at `nthhhhn/escape-plan`, branch `main`, initial commit `0bcd309`. The working tree was clean when this handoff was prepared. The local game uses FastAPI, WebSockets, React and SQLite. Previous backend validation passed 33 tests.
+The game source, launcher, documentation and deployment files are on GitHub at `nthhhhn/escape-plan`, branch `main`, initial commit `0bcd309`. The local game uses FastAPI, WebSockets, React and SQLite. On 2026-11-02, backend validation passed 39 tests and the frontend production build completed successfully before automated deployment was enabled.
 
 The current task is a separate, offline map-analysis database and animated HTML showcase. The initial approval/usage interruption has cleared. `map_lab/solver.py`, `map_lab/generate.py`, and `map_lab/test_solver.py` now exist. Four tests pass, including independent engine-based fixed-point analysis for all 256 fixed-exit 3x3 wall patterns, larger-board transitions and proof replays, symmetry deduplication, and independent-route counts. Every generated layout also passes all-state outcome/remoteness checks and its demonstration is replayed through the real engine.
 
