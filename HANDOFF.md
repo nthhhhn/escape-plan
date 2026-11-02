@@ -6,7 +6,7 @@ Updated: 2026-11-02 (Asia/Bangkok), GitHub-to-GCP deployment automated
 
 `EXTRA_FEATURES.md` now contains the instructor-facing feature choices and demonstration plan. The recommended 10-point package uses one AI feature (Q-learning, 2 points) and eight non-AI features (1 point each). It also lists more than 40 implemented alternatives with a short demonstration action, plus easiest, visual, and technical feature sets so the team can choose what to present.
 
-`CONNECTION_DEMO_HANDOFF.md` is the complete continuation guide for browser/server communication, LAN setup, GCP topology, WebSocket and REST flows, persistence, security, automated deployment, troubleshooting, presentation questions, and a timed demo sequence. The public endpoint and the deployment of commit `e646570` were both verified healthy on 2026-11-02. The local startup message was corrected: local admin controls are unlocked when `ADMIN_TOKEN` is unset; no local token file is generated.
+`CONNECTION_DEMO_HANDOFF.md` is the complete continuation guide for browser/server communication, LAN setup, GCP topology, WebSocket and REST flows, persistence, security, automated deployment, troubleshooting, presentation questions, and a timed demo sequence. GitHub Actions run `41427581972` deployed handoff commit `fd2ce74`, and the public endpoint was verified healthy on 2026-11-02. The local startup message was corrected: local admin controls are unlocked when `ADMIN_TOKEN` is unset; no local token file is generated.
 
 ## Live demonstration deployment
 

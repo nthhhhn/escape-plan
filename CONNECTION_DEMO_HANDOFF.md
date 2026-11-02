@@ -6,12 +6,12 @@ This document explains how Escape Plan connects, how to run it locally or on GCP
 
 - GitHub repository: `https://github.com/nthhhhn/escape-plan`
 - Production branch: `main`
-- Current documented deployment commit: `e646570`
+- Verified handoff deployment commit: `fd2ce74`
 - Public game: `https://34.21.135.108.nip.io`
 - Public dashboard: `https://34.21.135.108.nip.io/server`
 - Health endpoint: `https://34.21.135.108.nip.io/api/health`
 - Verified on 2026-11-02: health returned `status: ok`, native WebSocket transport, and one worker.
-- GitHub Actions run `41425794289` tested and deployed commit `e646570` successfully.
+- GitHub Actions run `41427581972` tested and deployed handoff commit `fd2ce74` successfully.
 - GCP project: `escape-plan-512508`
 - VM: `escape-plan-demo`, `asia-southeast1-c`, `e2-small`, 10 GB disk
 - Current public IP: `34.21.135.108` (ephemeral)
