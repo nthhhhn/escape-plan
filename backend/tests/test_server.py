@@ -295,3 +295,66 @@ def test_fresh_server_seeds_pretrained_q_policy(client):
     }
     assert len(model['q']) == status['states'] == 21954
     assert game.training is None
+
+
+PLAYER_ROOM_KEYS={'id','match_id','phase','rules','state','players','ready','activity','coaches','deadline','remaining','rematch','analysis','bot_info','map_metrics'}
+
+
+def start_classic(client,a,b):
+    pa=identify(a,'Alice');pb=identify(b,'Bob')
+    event(a,'create_room',{'mode':'classic','analysis':False},'create')
+    room=receive(a,'room')['payload']
+    event(b,'join_room',{'id':room['id']},'join')
+    receive(a,'room');receive(b,'room')
+    event(a,'ready',rid='ready-a');receive(a,'room');receive(b,'room')
+    event(b,'ready',rid='ready-b');receive(a,'room');receive(b,'room')
+    game=client.app.state.game;r=game.rooms[room['id']]
+    r.phase='playing';r.deadline=time.monotonic()+10
+    return pa,pb,game,r
+
+
+def test_admin_rooms_include_live_board_with_full_information(client):
+    with client.websocket_connect('/ws') as a, client.websocket_connect('/ws') as b:
+        pa,pb,game,r=start_classic(client,a,b)
+        names={pa['id']:'Alice',pb['id']:'Bob'}
+        entry=next(x for x in client.get('/api/admin',headers=ADMIN_HEADERS).json()['rooms'] if x['id']==r.id)
+        assert entry['size']==5 and entry['ply']==0 and entry['turn']=='warder' and entry['round']==0
+        assert entry['roles']=={'warder':names[r.roles['warder']],'prisoner':names[r.roles['prisoner']]}
+        board=entry['board']
+        assert len(board['tiles'])==25 and board['tiles']==r.state.tiles
+        assert board['positions']==r.state.positions and board['real_tunnel']==r.state.real_tunnel
+        assert board['tunnels']==r.state.tunnels and board['role'] is None
+        assert 'seed' not in board
+        warder=a if r.roles['warder']==pa['id'] else b
+        action=legal_actions(r.state)[0]
+        event(warder,'action',action,'m1',match_id=r.match_id,turn_id=0)
+        receive(a,'room');receive(b,'room')
+        moved=next(x for x in client.get('/api/admin',headers=ADMIN_HEADERS).json()['rooms'] if x['id']==r.id)
+        assert moved['ply']==1 and moved['turn']=='prisoner'
+        assert moved['board']['positions']==r.state.positions
+
+
+def test_admin_board_does_not_leak_into_player_room_messages(client):
+    with client.websocket_connect('/ws') as a, client.websocket_connect('/ws') as b:
+        pa,pb,game,r=start_classic(client,a,b)
+        # Hide the prisoner (Smoke) and the real exit (False exits) from the warder.
+        r.state.rules.modifiers.append('fake');r.state.smoke_until=r.state.ply+4
+        warder_ws,prisoner_ws=(a,b) if r.roles['warder']==pa['id'] else (b,a)
+        event(warder_ws,'action',legal_actions(r.state)[0],'m1',match_id=r.match_id,turn_id=0)
+        warder_view=receive(warder_ws,'room')['payload'];prisoner_view=receive(prisoner_ws,'room')['payload']
+        for view in (warder_view,prisoner_view):
+            assert set(view)==PLAYER_ROOM_KEYS
+            assert 'seed' not in view['state']
+        assert warder_view['state']['positions']['prisoner'] is None
+        assert warder_view['state']['real_tunnel'] is None
+        assert prisoner_view['state']['positions']['prisoner']==r.state.positions['prisoner']
+        board=next(x for x in client.get('/api/admin',headers=ADMIN_HEADERS).json()['rooms'] if x['id']==r.id)['board']
+        assert board['positions']['prisoner']==r.state.positions['prisoner'] is not None
+        assert board['real_tunnel']==r.state.real_tunnel is not None
+        # Lobby broadcasts never carry boards either.
+        assert all('board' not in room and 'state' not in room for room in game.lobby()['rooms'])
+
+
+def test_admin_board_requires_admin_token(client):
+    assert client.get('/api/admin').status_code==403
+    assert client.get('/api/admin',headers={'Authorization':'Bearer wrong'}).status_code==403

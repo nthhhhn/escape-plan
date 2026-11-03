@@ -2,6 +2,10 @@
 
 Updated: 2026-11-02 (Asia/Bangkok), GitHub-to-GCP deployment automated
 
+## Server dashboard live map (branch `feature/dashboard-live-map`, 2026-11-03)
+
+`/server` now draws each active room's real board under Room activity, with the same Board tiles and characters as the game, plus whose turn, round, move and the latest event. The host sees full information (prisoner under Smoke, the real tunnel among False exits). The data is the new `board` field on `GET /api/admin` rooms; player messages are unchanged. The dashboard polls about once a second while visible (was 4 s) and never while the tab is hidden. Dashboard text is about 2px larger, scoped to `.admin-page` in `frontend/src/dashboard.css`, so player screens are untouched. Not pushed or deployed yet.
+
 ## Extra-feature presentation handoff
 
 `EXTRA_FEATURES.md` now contains the instructor-facing feature choices and demonstration plan. The recommended 10-point package uses one AI feature (Q-learning, 2 points) and eight non-AI features (1 point each). It also lists more than 40 implemented alternatives with a short demonstration action, plus easiest, visual, and technical feature sets so the team can choose what to present.

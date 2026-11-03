@@ -9,4 +9,7 @@ export interface Lobby {online:{id:string;name:string;room:string|null}[];rooms:
 export interface Training {status:string; episodes?:number; completed?:number; metrics:{episode:number;win_rate:number;warder_win_rate?:number;prisoner_win_rate?:number;unresolved:number;samples:number;states:number}[]; coverage?:{size:number;modifiers:string[];powers:string;personality?:string}; elapsed_seconds?:number; states?:number; error?:string}
 export interface AdminClient {id:string;name:string;room:string|null;score:number;status:string}
 export interface MatchHistory {id:string;room:string|null;mode:string;players:{id:string;name:string;role:Role}[];status:string;winner:string|null;reason:string|null;started_at:number|null;finished_at:number|null}
-export interface Admin {clients:AdminClient[];rooms:{id:string;phase:string;mode:string;round:number;players:string[]}[];history:MatchHistory[];map_candidates:number;matches:number;training_running:boolean}
+// Host-only full-information board from GET /api/admin; role is null because the host is not a player.
+export type HostBoard = Omit<GameState,'role'> & {role:Role|null};
+export interface AdminRoom {id:string;phase:string;mode:string;size:number;round:number;ply:number;turn:Role|null;players:string[];roles:Partial<Record<Role,string|null>>;board:HostBoard|null}
+export interface Admin {clients:AdminClient[];rooms:AdminRoom[];history:MatchHistory[];map_candidates:number;matches:number;training_running:boolean}

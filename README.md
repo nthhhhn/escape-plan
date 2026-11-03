@@ -36,7 +36,7 @@ The server dashboard and training controls are available at `/server` on the hos
 
 ## Demo flow
 
-1. Open `/server` on the host computer, unlock cloud controls with the private `ADMIN_TOKEN`, and show the live client count, connected-client list, room activity, and match result history.
+1. Open `/server` on the host computer, unlock cloud controls with the private `ADMIN_TOKEN`, and show the live client count, connected-client list, room activity with each room's live map (updated about every second), and match result history.
 2. Open the game from two computers and enter different nicknames.
 3. Create a Classic room on one computer and join with the six-character room code on the second.
 4. Demonstrate join messages, the Ready check, synchronized 3-second start countdown, randomized 5x5 board, warder-first 10-second turns, clickable legal destinations, Win/Lost result, scores, and two-player rematch agreement.

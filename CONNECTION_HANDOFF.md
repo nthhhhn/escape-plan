@@ -237,7 +237,7 @@ WebSocket handles live gameplay. REST is used for health, training information, 
 |---|---|---|
 | `GET /api/health` | Service status, transport, worker count, LAN URL | Public |
 | `GET /api/training` | Saved Q-learning training status | Public |
-| `GET /api/admin` | Connected clients, rooms, history, and counts | Admin token when configured |
+| `GET /api/admin` | Connected clients, rooms (each with its live host board), history, and counts | Admin token when configured |
 | `POST /api/admin/train` | Start a training process | Admin token when configured |
 | `POST /api/admin/clients/{id}/disconnect` | Disconnect one client | Admin token when configured |
 | `POST /api/admin/rooms/{id}/reset` | Reset one room | Admin token when configured |
@@ -250,6 +250,10 @@ Authorization: Bearer <ADMIN_TOKEN>
 ```
 
 Local mode may leave `ADMIN_TOKEN` unset. In that case, local admin operations are unlocked. Public deployment must set a private token.
+
+Each `GET /api/admin` room entry carries the live map for the dashboard: `size`, `round`, `ply`, `turn`, `roles` (role to nickname), and `board`, the host's full-information state (tiles, every tunnel and which one is real, key, roadblocks, pickups, both positions even under Smoke). It comes from `host_view()` in `engine.py`, drops the generation seed, and is only ever returned by this admin route. Player `room` messages still use the per-role `observation()` and are unchanged; `test_admin_board_does_not_leak_into_player_room_messages` guards that.
+
+The `/server` page polls `GET /api/admin` about once a second while the tab is visible and unlocked, so moves appear live. A hidden tab does not poll, and a locked cloud dashboard fetches once and waits for Unlock.
 
 ## Local Server Connection
 

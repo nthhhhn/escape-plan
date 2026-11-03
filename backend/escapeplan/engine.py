@@ -514,6 +514,18 @@ def observation(s: State, role: str) -> dict:
     return result
 
 
+def host_view(s: State) -> dict:
+    """Full-information board for the host dashboard only, never sent to a player.
+
+    It shows the real tunnel and the prisoner even under Smoke, because the host
+    operates the server. The generation seed still stays private.
+    """
+    result = asdict(s)
+    result.pop('seed')
+    result.update(role=None, rounds=s.rounds, seconds=s.seconds)
+    return result
+
+
 def determinize(view: dict, seed: int) -> State:
     """Sample an information-consistent state, never the actual private seed."""
     data = deepcopy(view)

@@ -4,4 +4,5 @@ import App from './App';
 import './index.css';
 import './revision.css';
 import './refinements.css';
+import './dashboard.css';
 ReactDOM.createRoot(document.getElementById('root')!).render(<React.StrictMode><App /></React.StrictMode>);

@@ -17,7 +17,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Header, HTTPExcepti
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
-from .engine import Rules, State, generate, apply_action, observation, legal_actions
+from .engine import Rules, State, generate, apply_action, observation, legal_actions, host_view
 from .ai import choose, analyze_pair, train
 from .storage import Store
 
@@ -499,6 +499,19 @@ async def start_training(request: Request, authorization: str | None = Header(de
     return {'status':'starting'}
 
 
+def admin_room(g, r):
+    """One dashboard room entry. The board is the host's full-information view."""
+    names = {p: g.players[p].name for p in r.players if p in g.players}
+    s = r.state
+    return {
+        'id': r.id, 'phase': r.phase, 'mode': r.rules.mode, 'size': r.rules.size,
+        'round': s.rounds if s else 0, 'ply': s.ply if s else 0, 'turn': s.turn if s else None,
+        'players': list(names.values()),
+        'roles': {role: names.get(pid) for role, pid in r.roles.items()},
+        'board': host_view(s) if s else None,
+    }
+
+
 @app.get('/api/admin')
 def dashboard(request: Request, authorization: str | None = Header(default=None)):
     g = admin(request, authorization)
@@ -509,7 +522,7 @@ def dashboard(request: Request, authorization: str | None = Header(default=None)
             continue
         room = g.rooms.get(p.room)
         clients.append({'id':pid,'name':p.name,'room':p.room,'score':p.score,'status':room.phase if room else 'lobby'})
-    return {'clients':clients,'rooms':[{'id':r.id,'phase':r.phase,'mode':r.rules.mode,'round':r.state.rounds if r.state else 0,'players':[g.players[p].name for p in r.players]} for r in g.rooms.values()], 'history':g.store.match_history(), 'map_candidates':g.store.db.execute('SELECT COUNT(*) FROM maps').fetchone()[0], 'matches':g.store.db.execute('SELECT COUNT(*) FROM matches').fetchone()[0], 'training_running': bool(g.training and not g.training.done())}
+    return {'clients':clients,'rooms':[admin_room(g, r) for r in g.rooms.values()], 'history':g.store.match_history(), 'map_candidates':g.store.db.execute('SELECT COUNT(*) FROM maps').fetchone()[0], 'matches':g.store.db.execute('SELECT COUNT(*) FROM matches').fetchone()[0], 'training_running': bool(g.training and not g.training.done())}
 
 
 @app.post('/api/admin/clients/{player_id}/disconnect')

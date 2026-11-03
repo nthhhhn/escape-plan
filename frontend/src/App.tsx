@@ -3,7 +3,7 @@ import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, AudioLines, Bot, Check, Chev
 import { Character, CircleTimer, BotPicker, FieldGuide, ReactionPanel, availableTargets } from './experience';
 import { Button } from './components/ui/button';
 import { API, WS_URL } from './config';
-import type { Admin, Analysis, GameState, Lobby, Room, Rules, Training } from './types';
+import type { Admin, AdminRoom, Analysis, GameState, HostBoard, Lobby, Room, Rules, Training } from './types';
 
 const MODS = [
   {id:'shift',label:'Moving walls',text:'Push an obstacle instead of moving.',icon:Layers},
@@ -92,7 +92,17 @@ export default function App(){
   const fetchAdmin=useCallback(async()=>{
     try{const r=await fetch(`${API}/api/admin`,{headers:adminHeaders()});if(r.status===403){setAdmin(null);throw new Error('Enter the cloud admin token to unlock server controls.')}if(!r.ok)throw new Error('Could not load the server dashboard.');setAdmin(await r.json());if(adminToken)sessionStorage.setItem('escape-admin',adminToken)}catch(e){setToast((e as Error).message)}
   },[adminHeaders,adminToken]);
-  useEffect(()=>{if(screen!=='admin')return;void fetchAdmin();const id=setInterval(()=>void fetchAdmin(),4000);return()=>clearInterval(id)},[screen,fetchAdmin]);
+  // Dashboard refresh: about once a second while the tab is visible and unlocked, so moves show live.
+  // A hidden tab never polls; a locked dashboard fetches once and waits for Unlock.
+  const adminUnlocked=admin!==null;
+  useEffect(()=>{
+    if(screen!=='admin')return;
+    let alive=true;let busy=false;let timer:ReturnType<typeof setTimeout>|undefined;
+    const tick=async()=>{clearTimeout(timer);if(busy||document.hidden)return;busy=true;try{await fetchAdmin()}finally{busy=false}if(alive&&adminUnlocked&&!document.hidden)timer=setTimeout(()=>void tick(),1000)};
+    const onVisibility=()=>{if(document.hidden)clearTimeout(timer);else void tick()};
+    document.addEventListener('visibilitychange',onVisibility);void tick();
+    return()=>{alive=false;clearTimeout(timer);document.removeEventListener('visibilitychange',onVisibility)};
+  },[screen,adminUnlocked,fetchAdmin]);
 
   const state=room?.state;
   const opponent=room?.players.find(p=>p.id!==me?.id);
@@ -161,18 +171,18 @@ export default function App(){
       </>}
       {screen==='guide'&&<FieldGuide/>}
       {screen==='lab'&&<><div className="page-heading"><div><div className="eyebrow"><span className="yellow-line"/> MACHINE INTELLIGENCE</div><h1>AI Lab</h1><p>Train a Q-learning opponent. Watch the evidence, episode by episode.</p></div><FlaskConical size={40} className="yellow"/></div><div className="lab-layout"><section className="card chart-card"><div className="card-title"><h3>Training observatory</h3><span className="small-tag">{training.status.replaceAll('_',' ')}</span></div><div className="metric-row"><div><span>EPISODES</span><strong>{training.completed||0}<small> / {training.episodes||'—'}</small></strong></div><div><span>LAST EVALUATION</span><strong>{training.metrics.length?`${Math.round(training.metrics.at(-1)!.win_rate*100)}%`:'—'}<small> wins</small></strong></div><div><span>LEARNED STATES</span><strong>{training.states||training.metrics.at(-1)?.states||'—'}</strong></div></div><TrainingChart training={training}/>{training.metrics.at(-1)?.warder_win_rate!==undefined&&<p>Warder wins: {Math.round(training.metrics.at(-1)!.warder_win_rate!*100)}% · Prisoner wins: {Math.round(training.metrics.at(-1)!.prisoner_win_rate!*100)}% · 10 held-out games per role.</p>}<p className="fine-print">Measured against a random legal-action opponent on 20 held-out episodes per evaluation. Roles alternate. Unfinished episodes count separately; improvement is not guaranteed.</p>{training.coverage&&<div className="coverage"><span>TRAINED CONFIGURATION</span><p>{training.coverage.personality||'Original policy'} · {training.coverage.size} × {training.coverage.size} · {training.coverage.powers} powers · {training.coverage.modifiers.join(', ')||'no modifiers'}</p></div>}</section><section className="card"><div className="card-title"><h3>Training controls</h3><Bot size={19}/></div><label className="field-label" htmlFor="training-style">TRAINING PERSONALITY</label><select id="training-style" value={rules.personality} onChange={e=>setRules(r=>({...r,personality:e.target.value}))}>{['pursuer','planner','trickster'].map(style=><option key={style}>{style}</option>)}</select><p>Uses the size, powers, and modifiers selected in the play setup. A separate worker trains both roles while the game server stays responsive.</p><label className="field-label" htmlFor="episodes">EPISODES</label><input id="episodes" type="number" min={20} max={2000} step={20} value={episodes} onChange={e=>setEpisodes(Number(e.target.value))}/><Button className="w-full mt-5" disabled={busy||training.status==='running'} onClick={()=>void runTraining()}>{training.status==='running'?<LoaderCircle className="spin" size={16}/>:<Zap size={16}/>}Train the learner</Button><p className="fine-print mt-4">Choose “The learner” as your opponent in Stages or Special. Unseen states use an explicitly labeled pathfinding fallback.</p></section></div><section className="policy-grid">{BOTS.map((b,i)=><div className="card" key={b.id}><span className="policy-number">0{i+1}</span><h3>{b.label}</h3><span className="small-tag">{b.detail}</span><p>{['Chooses among legal actions. Unpredictable, but rarely a step ahead.','Searches the map breadth-first to chase a target or find the exit.','Uses a distance heuristic to search toward its objective.','Looks ahead with alpha-beta pruning. Targets 4–6 plies within a time budget.','Learns state-action values through actual play and saves its policy.'][i]}</p></div>)}</section></>}
-      {screen==='admin'&&<>
+      {screen==='admin'&&<div className="admin-page">
         <div className="page-heading"><div><div className="eyebrow"><span className="yellow-line"/> HOST CONTROL</div><h1>Server dashboard</h1><p>Live connections, match activity, results, and server controls.</p></div><Settings2 size={38}/></div>
         {!admin&&<section className="card admin-auth"><LockKeyhole size={22}/><div><h3>Server authentication</h3><p>Enter the private admin token configured on the cloud VM.</p></div><input aria-label="Server admin token" type="password" value={adminToken} onChange={e=>setAdminToken(e.target.value)} placeholder="Admin token"/><Button onClick={()=>void fetchAdmin()}>Unlock <ArrowRight size={16}/></Button></section>}
         {admin&&<>
           <div className="admin-metrics">{[{label:'CONNECTED CLIENTS',value:admin.clients.length,icon:Users},{label:'ACTIVE ROOMS',value:admin.rooms.filter(r=>['playing','waiting','paused','ready','countdown'].includes(r.phase)).length,icon:Radio},{label:'RECORDED MATCHES',value:admin.matches,icon:Flag},{label:'MAP CANDIDATES',value:admin.map_candidates,icon:Layers}].map(m=><section className="card" key={m.label}><m.icon size={20}/><span>{m.label}</span><strong>{m.value}</strong></section>)}</div>
           <div className="lab-layout">
-            <section className="card"><div className="card-title"><h3>Connected clients</h3><span className="count-badge">{admin.clients.length} live</span></div>{admin.clients.map(p=><div className="admin-row" key={p.id}><span className="avatar">{p.name.slice(0,2).toUpperCase()}</span><div><strong>{p.name}</strong><p>{p.room?`Room ${p.room} · ${p.status}`:'In the lobby'} · score {p.score} · ID {p.id.slice(0,8)}</p></div>{disconnectConfirm===p.id?<div className="admin-actions"><Button size="sm" variant="destructive" onClick={()=>void disconnectClient(p.id)}>Confirm</Button><Button size="sm" variant="secondary" onClick={()=>setDisconnectConfirm(null)}>Cancel</Button></div>:<Button size="sm" variant="outline" onClick={()=>setDisconnectConfirm(p.id)}>Disconnect</Button>}</div>)}{!admin.clients.length&&<p>No clients connected.</p>}<h3 className="mt-6">Room activity</h3>{admin.rooms.map(r=><div key={r.id} className="admin-row"><div><strong>{r.id} · {r.mode}</strong><p>{r.players.join(' vs ')} · round {r.round+1}</p></div><span className="small-tag">{r.phase}</span>{roomResetConfirm===r.id?<div className="admin-actions"><Button size="sm" variant="destructive" onClick={()=>void resetRoom(r.id)}>Confirm reset</Button><Button size="sm" variant="secondary" onClick={()=>setRoomResetConfirm(null)}>Cancel</Button></div>:<Button size="sm" variant="outline" onClick={()=>setRoomResetConfirm(r.id)}>Reset game</Button>}</div>)}{!admin.rooms.length&&<p>No active rooms.</p>}</section>
+            <section className="card"><div className="card-title"><h3>Connected clients</h3><span className="count-badge">{admin.clients.length} live</span></div>{admin.clients.map(p=><div className="admin-row" key={p.id}><span className="avatar">{p.name.slice(0,2).toUpperCase()}</span><div><strong>{p.name}</strong><p>{p.room?`Room ${p.room} · ${p.status}`:'In the lobby'} · score {p.score} · ID {p.id.slice(0,8)}</p></div>{disconnectConfirm===p.id?<div className="admin-actions"><Button size="sm" variant="destructive" onClick={()=>void disconnectClient(p.id)}>Confirm</Button><Button size="sm" variant="secondary" onClick={()=>setDisconnectConfirm(null)}>Cancel</Button></div>:<Button size="sm" variant="outline" onClick={()=>setDisconnectConfirm(p.id)}>Disconnect</Button>}</div>)}{!admin.clients.length&&<p>No clients connected.</p>}<h3 className="mt-6 admin-subhead">Room activity</h3>{admin.rooms.map(r=><div key={r.id} className="admin-room"><div className="admin-row"><div><strong>{r.id} · {r.mode}</strong><p>{r.players.join(' vs ')} · round {r.round+1}</p></div><span className="small-tag">{r.phase}</span>{roomResetConfirm===r.id?<div className="admin-actions"><Button size="sm" variant="destructive" onClick={()=>void resetRoom(r.id)}>Confirm reset</Button><Button size="sm" variant="secondary" onClick={()=>setRoomResetConfirm(null)}>Cancel</Button></div>:<Button size="sm" variant="outline" onClick={()=>setRoomResetConfirm(r.id)}>Reset game</Button>}</div><AdminLiveBoard room={r}/></div>)}{!admin.rooms.length&&<p>No active rooms.</p>}</section>
             <section className="card reset-card"><RotateCcw size={30}/><h2>Start with a clean slate.</h2><p>Reset all current games and player scores. Everyone returns to the lobby. Recorded match history and trained policies stay available.</p>{resetConfirm?<div className="flex gap-2"><Button variant="destructive" onClick={()=>void reset()}>Confirm reset</Button><Button variant="secondary" onClick={()=>setResetConfirm(false)}>Cancel</Button></div>:<Button variant="outline" onClick={()=>setResetConfirm(true)}>Reset games & scores</Button>}</section>
           </div>
           <section className="card history-card"><div className="card-title"><h3>Match result history</h3><span className="count-badge">Latest {admin.history.length}</span></div><div className="history-table"><div className="history-head"><span>Finished</span><span>Match</span><span>Players</span><span>Result</span></div>{admin.history.map(match=><div className="history-row" key={match.id}><span>{match.finished_at?new Date(match.finished_at*1000).toLocaleString():'Previous record'}</span><span><strong>{match.room||match.id.slice(0,6)}</strong><small>{match.mode}</small></span><span>{match.players.map(p=>`${p.name} (${p.role})`).join(' vs ')}</span><span><strong>{match.winner?`${match.winner} won`:match.status}</strong><small>{match.reason||'—'}</small></span></div>)}{!admin.history.length&&<p>No matches have been recorded yet.</p>}</div></section>
         </>}
-      </>}
+      </div>}
       </main><footer><span>ESCAPE PLAN</span><span>OUTTHINK. OUTMANEUVER. OUT.</span><span>NETCENTRIC ARCHITECTURE</span></footer>
     </div>
     {toast&&<div className="toast" role="status"><span>{toast}</span><button onClick={()=>setToast('')} aria-label="Dismiss notification"><X size={16}/></button></div>}
@@ -192,7 +202,27 @@ function MatchSidebar({room,state,me,muted,onSound,onLeave,onSkip}:{room:Room;st
   </>
 }
 
-function Board({state,preview=false,onCell,active=false,targets=[]}:{state?:GameState;preview?:boolean;onCell?:(cell:number)=>void;active?:boolean;targets?:number[]}){
+const ROLE_LABEL:Record<string,string>={warder:'Warder',prisoner:'Prisoner'};
+// Read-only live map for the host dashboard. Uses the same Board and characters as the game,
+// with the host's full-information state (hidden prisoner and the real tunnel are shown).
+function AdminLiveBoard({room}:{room:AdminRoom}){
+  const board=room.board;if(!board)return null;
+  const turn=room.turn;const finished=room.phase==='finished'||Boolean(board.winner);
+  const status=finished?null:room.phase==='paused'?'Paused, waiting for a player to reconnect':room.phase==='countdown'||room.phase==='ready'?'Match is about to start':null;
+  const width=room.size<=5?260:room.size<=7?290:320;
+  return <div className="admin-live">
+    <div className="admin-board" style={{maxWidth:width}}><Board state={board}/></div>
+    <div className="admin-live-status">
+      <span className="panel-kicker">{finished?'RESULT':'WHOSE TURN'}</span>
+      {finished?<div className="admin-turn"><Character role={board.winner||'warder'}/><div><strong>{board.winner?`${room.roles[board.winner]||ROLE_LABEL[board.winner]} won`:'Match over'}</strong><p>{board.reason||(board.winner?`${ROLE_LABEL[board.winner]} wins`:'')}</p></div></div>
+      :turn&&<div className="admin-turn"><Character role={turn}/><div><strong>{room.roles[turn]||ROLE_LABEL[turn]}</strong><p>{status||`${ROLE_LABEL[turn]} to move`}</p></div></div>}
+      <dl className="admin-facts"><div><dt>Round</dt><dd>{room.round+1}</dd></div><div><dt>Move</dt><dd>{room.ply}</dd></div><div><dt>Warder</dt><dd>{room.roles.warder||'Unassigned'}</dd></div><div><dt>Prisoner</dt><dd>{room.roles.prisoner||'Unassigned'}</dd></div></dl>
+      {board.last_event&&<p className="admin-last-event">{board.last_event}</p>}
+    </div>
+  </div>;
+}
+
+function Board({state,preview=false,onCell,active=false,targets=[]}:{state?:GameState|HostBoard;preview?:boolean;onCell?:(cell:number)=>void;active?:boolean;targets?:number[]}){
   const size=state?.rules.size||5;const tiles=state?.tiles||PREVIEW;
   return <div className={`board-container ${preview?'preview-board':''}`}><div className="board-col-labels" style={{gridTemplateColumns:`repeat(${size},1fr)`}}>{Array.from({length:size},(_,i)=><span key={i}>{String.fromCharCode(65+i)}</span>)}</div><div className="board-side"><div className="board-row-labels">{Array.from({length:size},(_,i)=><span key={i}>{String(i+1).padStart(2,'0')}</span>)}</div><div className="board" style={{gridTemplateColumns:`repeat(${size},1fr)`}}>{tiles.map((tile,i)=>{
     const warder=state?state.positions.warder===i:i===6;const prisoner=state?state.positions.prisoner===i:i===18;const road=Boolean(state?.roadblocks[i]);const tunnel=tile==='T';const isKey=state?.key===i;const pickup=state?.pickups[i];const trueExit=state?.real_tunnel===i;const Icon=pickup?POWER_ICONS[pickup]:null;
