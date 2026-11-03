@@ -208,7 +208,7 @@ const ROLE_LABEL:Record<string,string>={warder:'Warder',prisoner:'Prisoner'};
 function AdminLiveBoard({room}:{room:AdminRoom}){
   const board=room.board;if(!board)return null;
   const turn=room.turn;const finished=room.phase==='finished'||Boolean(board.winner);
-  const status=finished?null:room.phase==='paused'?'Paused, waiting for a player to reconnect':room.phase==='countdown'||room.phase==='ready'?'Match is about to start':null;
+  const status=finished?null:room.phase==='aborted'?'Match cancelled':room.phase==='paused'?'Paused, waiting for a player to reconnect':room.phase==='countdown'||room.phase==='ready'?'Match is about to start':null;
   const width=room.size<=5?260:room.size<=7?290:320;
   return <div className="admin-live">
     <div className="admin-board" style={{maxWidth:width}}><Board state={board}/></div>

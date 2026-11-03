@@ -516,13 +516,13 @@ def admin_room(g, r):
 def dashboard(request: Request, authorization: str | None = Header(default=None)):
     g = admin(request, authorization)
     clients = []
-    for pid in g.connections.values():
+    for pid in list(g.connections.values()):
         p = g.players.get(pid)
         if not pid or not p:
             continue
         room = g.rooms.get(p.room)
         clients.append({'id':pid,'name':p.name,'room':p.room,'score':p.score,'status':room.phase if room else 'lobby'})
-    return {'clients':clients,'rooms':[admin_room(g, r) for r in g.rooms.values()], 'history':g.store.match_history(), 'map_candidates':g.store.db.execute('SELECT COUNT(*) FROM maps').fetchone()[0], 'matches':g.store.db.execute('SELECT COUNT(*) FROM matches').fetchone()[0], 'training_running': bool(g.training and not g.training.done())}
+    return {'clients':clients,'rooms':[admin_room(g, r) for r in list(g.rooms.values())], 'history':g.store.match_history(), 'map_candidates':g.store.db.execute('SELECT COUNT(*) FROM maps').fetchone()[0], 'matches':g.store.db.execute('SELECT COUNT(*) FROM matches').fetchone()[0], 'training_running': bool(g.training and not g.training.done())}
 
 
 @app.post('/api/admin/clients/{player_id}/disconnect')
