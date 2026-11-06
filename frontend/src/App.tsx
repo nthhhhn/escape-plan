@@ -233,8 +233,13 @@ function Board({state,preview=false,onCell,active=false,targets=[]}:{state?:Game
 }
 
 function AnalysisCard({analysis,phase,coach}:{analysis:Analysis|null;phase:string;coach?:Analysis['coach']}){
- const e=analysis?.estimate;const n=e?.samples||1;
- return <section className="card analysis-card"><h3>Optional coach</h3>{e?<><div className="forecast-number">{e.prisoner_pct}<span>%</span><small>simulated escape rate</small></div><div className="probability-bar"><span style={{width:`${e.prisoner/n*100}%`}}/><span style={{width:`${e.unresolved/n*100}%`}}/><span style={{width:`${e.warder/n*100}%`}}/></div><p>{e.samples} simulations · {e.unresolved} unresolved</p><p className="fine-print">Random legal play, not a calibrated prediction of human play.</p></>:<p>{phase==='finished'?'Match complete.':phase==='playing'?'Analyzing this position…':'Analysis starts when play begins.'}</p>}{coach&&<div className="coach-feedback"><strong>Your last analyzed move: {coach.category}</strong><p>{coach.category==='uncertain'?'No clear change beyond simulation noise.':`${coach.delta>0?'+':''}${coach.delta} percentage points in simulated wins.`}</p></div>}</section>
+ // Keep the last estimate on screen while the next position is analysed, so the number does not blank out after every move.
+ const last=useRef<Analysis['estimate']|null>(null);
+ if(analysis?.estimate)last.current=analysis.estimate;
+ if(phase!=='playing'&&phase!=='paused'&&!analysis)last.current=null;
+ const updating=!analysis?.estimate&&!!last.current;
+ const e=analysis?.estimate||last.current;const n=e?.samples||1;
+ return <section className="card analysis-card"><h3>Optional coach</h3>{e?<><div className="forecast-number">{e.prisoner_pct}<span>%</span><small>simulated escape rate</small></div><div className="probability-bar"><span style={{width:`${e.prisoner/n*100}%`}}/><span style={{width:`${e.unresolved/n*100}%`}}/><span style={{width:`${e.warder/n*100}%`}}/></div><p>{e.samples} simulations · {e.unresolved} unresolved{updating?' · updating…':''}</p><p className="fine-print">Random legal play, not a calibrated prediction of human play.</p></>:<p>{phase==='finished'?'Match complete.':phase==='playing'?'Analyzing this position…':'Analysis starts when play begins.'}</p>}{coach&&<div className="coach-feedback"><strong>Your last analyzed move: {coach.category}</strong><p>{coach.category==='uncertain'?'No clear change beyond simulation noise.':`${coach.delta>0?'+':''}${coach.delta} percentage points in simulated wins.`}</p></div>}</section>
 }
 
 function TrainingChart({training}:{training:Training}){

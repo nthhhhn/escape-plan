@@ -138,7 +138,7 @@ def random_step(s: State, rng: random.Random) -> State:
     return apply_action(s, {'kind': 'pass'}, timeout=True)
 
 
-def rollout(view: dict, seed: int, count: int = 200, horizon: int = 60, budget: float = 5) -> dict:
+def rollout(view: dict, seed: int, count: int = 200, horizon: int = 60, budget: float = 1.5) -> dict:
     start = time.monotonic()
     rng = random.Random(seed)
     wins = {'warder': 0, 'prisoner': 0, 'unresolved': 0}
@@ -160,7 +160,7 @@ def analyze_pair(before: dict | None, after: dict, role: str, seed: int) -> dict
     feedback = None
     # Do not compare different information sets: revelations would masquerade as move quality.
     if before and before['positions']['prisoner'] is not None and after['positions']['prisoner'] is not None and before['real_tunnel'] is not None and after['real_tunnel'] is not None:
-        prior = rollout(before, seed, budget=3)
+        prior = rollout(before, seed, budget=1)
         old = prior[role]/max(prior['samples'], 1)
         new = current[role]/max(current['samples'], 1)
         delta = new-old
